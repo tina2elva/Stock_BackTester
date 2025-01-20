@@ -25,24 +25,31 @@ func NewSimpleStrategy() *SimpleStrategy {
 
 func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio) {
 	// 调试日志
+	// 获取指标值
+	ma5, hasMA5 := data.Indicators["MA5"]
+	macd, hasMACD := data.Indicators["MACD"]
+	signal, hasSignal := data.Indicators["Signal"]
+	histogram, hasHistogram := data.Indicators["MACDHistogram"]
+
+	// 调试日志
 	log.Printf("[%s] Close: %.2f, MA5: %.2f, MACD: %.2f, Signal: %.2f, Bought: %v",
 		data.Timestamp.Format("2006-01-02"),
 		data.Close,
-		data.MA5,
-		data.MACD,
-		data.Signal,
+		ma5,
+		macd,
+		signal,
 		s.bought)
 
-	if !s.bought {
+	if !s.bought && hasMA5 && hasMACD && hasSignal && hasHistogram {
 		// 买入条件：收盘价高于MA5的98%且MACD上穿信号线
-		if data.Close > data.MA5*0.98 && data.MACD > data.Signal && data.MACDHistogram > 0 {
+		if data.Close > ma5*0.98 && macd > signal && histogram > 0 {
 			log.Printf("Buy signal: Close (%.2f) > MA5 (%.2f), MACD (%.2f) > Signal (%.2f)",
-				data.Close, data.MA5, data.MACD, data.Signal)
+				data.Close, ma5, macd, signal)
 			portfolio.Buy(data.Timestamp, data.Close, 100)
 			s.bought = true
 			s.buyPrice = data.Close
 		}
-	} else if s.bought {
+	} else if s.bought && hasMACD && hasSignal && hasHistogram {
 		// 调整止损/止盈条件
 		currentReturn := (data.Close - s.buyPrice) / s.buyPrice
 
@@ -59,8 +66,8 @@ func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfol
 			s.bought = false
 		}
 		// MACD下穿信号线时卖出
-		if data.MACD < data.Signal && data.MACDHistogram < 0 {
-			log.Printf("MACD cross down: MACD (%.2f) < Signal (%.2f)", data.MACD, data.Signal)
+		if macd < signal && histogram < 0 {
+			log.Printf("MACD cross down: MACD (%.2f) < Signal (%.2f)", macd, signal)
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
 		}

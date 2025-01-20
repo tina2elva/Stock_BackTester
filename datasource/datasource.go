@@ -58,7 +58,9 @@ func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*common
 				Low:       low,
 				Close:     close,
 				Volume:    volume,
-				MA5:       ma5,
+				Indicators: map[string]float64{
+					"MA5": ma5,
+				},
 			})
 		}
 	}

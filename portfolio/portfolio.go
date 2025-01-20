@@ -3,16 +3,18 @@ package portfolio
 import (
 	"stock/broker"
 	"stock/common"
+	"stock/strategy"
 	"time"
 )
 
 type Portfolio struct {
-	cash          float64
-	initialCash   float64
-	positions     map[string]float64
-	trades        []common.Trade
-	positionSizes map[string]float64
-	broker        broker.Broker
+	cash            float64
+	initialCash     float64
+	positions       map[string]float64
+	trades          []common.Trade
+	positionSizes   map[string]float64
+	broker          broker.Broker
+	currentStrategy strategy.Strategy
 }
 
 func NewPortfolio(initialCash float64, broker broker.Broker) *Portfolio {
@@ -24,6 +26,10 @@ func NewPortfolio(initialCash float64, broker broker.Broker) *Portfolio {
 		positionSizes: make(map[string]float64),
 		broker:        broker,
 	}
+}
+
+func (p *Portfolio) SetCurrentStrategy(strategy strategy.Strategy) {
+	p.currentStrategy = strategy
 }
 
 func (p *Portfolio) Balance() float64 {
@@ -63,13 +69,14 @@ func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) er
 	if p.cash >= totalCost {
 		p.cash -= totalCost
 		p.positions["asset"] += quantity
-		p.positionSizes["asset"] += price * quantity
+		p.positionSizes["asset"] += quantity
 		p.trades = append(p.trades, common.Trade{
 			Timestamp: timestamp,
 			Price:     price,
 			Quantity:  quantity,
 			Type:      common.ActionBuy,
 			Fee:       fee,
+			Strategy:  p.currentStrategy.Name(),
 		})
 	}
 	return nil
@@ -91,13 +98,14 @@ func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) e
 
 	p.cash += totalProceeds
 	p.positions["asset"] -= quantity
-	p.positionSizes["asset"] -= price * quantity
+	p.positionSizes["asset"] -= quantity
 	p.trades = append(p.trades, common.Trade{
 		Timestamp: timestamp,
 		Price:     price,
 		Quantity:  quantity,
 		Type:      common.ActionSell,
 		Fee:       fee,
+		Strategy:  p.currentStrategy.Name(),
 	})
 	return nil
 }

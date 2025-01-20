@@ -1,7 +1,6 @@
 package backtest
 
 import (
-	"log"
 	"math"
 	"stock/broker"
 	"stock/common"
@@ -73,10 +72,11 @@ func (b *Backtest) Run() {
 		go func(index int) {
 			defer wg.Done()
 			for _, dataPoint := range b.data {
-				log.Printf("[策略执行] %T 处理数据点: %s", b.strategies[index], dataPoint.Timestamp)
+				// 在交易前设置当前策略名称
+				b.portfolios[index].SetCurrentStrategy(b.strategies[index])
 				b.strategies[index].OnData(dataPoint, b.portfolios[index])
 			}
-			log.Printf("[策略结束] %T 执行结束处理", b.strategies[index])
+			b.portfolios[index].SetCurrentStrategy(b.strategies[index])
 			b.strategies[index].OnEnd(b.portfolios[index])
 		}(i)
 	}

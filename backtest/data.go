@@ -35,16 +35,18 @@ func PreprocessData(data []common.Bar) []*common.DataPoint {
 	points := make([]*common.DataPoint, len(data)-start)
 	for i := start; i < len(data); i++ {
 		points[i-start] = &common.DataPoint{
-			Timestamp:     time.Unix(data[i].Time, 0),
-			Open:          data[i].Open,
-			High:          data[i].High,
-			Low:           data[i].Low,
-			Close:         data[i].Close,
-			Volume:        data[i].Volume,
-			MA5:           ma5[i-start],
-			MACD:          macdValues[i-start].MACD,
-			Signal:        macdValues[i-start].Signal,
-			MACDHistogram: macdValues[i-start].Histogram,
+			Timestamp: time.Unix(data[i].Time, 0),
+			Open:      data[i].Open,
+			High:      data[i].High,
+			Low:       data[i].Low,
+			Close:     data[i].Close,
+			Volume:    data[i].Volume,
+			Indicators: map[string]float64{
+				"MA5":           ma5[i-start],
+				"MACD":          macdValues[i-start].MACD,
+				"Signal":        macdValues[i-start].Signal,
+				"MACDHistogram": macdValues[i-start].Histogram,
+			},
 		}
 	}
 

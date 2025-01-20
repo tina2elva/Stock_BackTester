@@ -14,11 +14,16 @@ type RSIStrategy struct {
 }
 
 func NewRSIStrategy(period int, overbought, oversold float64) *RSIStrategy {
+	// 优化RSI参数
 	return &RSIStrategy{
-		period:     period,
-		overbought: overbought,
-		oversold:   oversold,
+		period:     9,  // 缩短周期以提高灵敏度
+		overbought: 65, // 降低超买阈值
+		oversold:   35, // 提高超卖阈值
 	}
+}
+
+func (s *RSIStrategy) Name() string {
+	return "RSI Strategy"
 }
 
 func (s *RSIStrategy) Run(data []common.Bar) []common.Signal {
@@ -39,20 +44,20 @@ func (s *RSIStrategy) Run(data []common.Bar) []common.Signal {
 	for i := start; i < len(data); i++ {
 		rsi := rsiValues[i]
 
-		// 生成交易信号
-		if rsi < s.oversold {
+		// 生成交易信号，增加过滤条件
+		if rsi < s.oversold && rsi > 30 { // 在超卖区域但不过度
 			signals[i] = common.Signal{
 				Action: common.ActionBuy,
 				Price:  data[i].Close,
 				Time:   data[i].Time,
-				Qty:    1, // 默认交易1单位
+				Qty:    2, // 增加交易单位
 			}
-		} else if rsi > s.overbought {
+		} else if rsi > s.overbought && rsi < 70 { // 在超买区域但不过度
 			signals[i] = common.Signal{
 				Action: common.ActionSell,
 				Price:  data[i].Close,
 				Time:   data[i].Time,
-				Qty:    1, // 默认交易1单位
+				Qty:    2, // 增加交易单位
 			}
 		}
 	}
@@ -92,19 +97,23 @@ func (s *RSIStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio)
 	if currentRSI < s.oversold {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | RSI: %.2f",
+		log.Printf("[交易日志] 策略: %s | 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
+			s.Name(),
 			data.Timestamp.Format("2006-01-02 15:04:05"),
 			data.Close,
 			quantity,
-			currentRSI)
+			portfolio.AvailableCash(),
+			portfolio.PositionSize("asset"))
 	} else if currentRSI > s.overbought {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Sell(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | RSI: %.2f",
+		log.Printf("[交易日志] 策略: %s | 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
+			s.Name(),
 			data.Timestamp.Format("2006-01-02 15:04:05"),
 			data.Close,
 			quantity,
-			currentRSI)
+			portfolio.AvailableCash(),
+			portfolio.PositionSize("asset"))
 	}
 }
 
@@ -113,4 +122,37 @@ func (s *RSIStrategy) OnEnd(portfolio common.Portfolio) {
 	if closer, ok := portfolio.(interface{ CloseAllPositions() }); ok {
 		closer.CloseAllPositions()
 	}
+}
+
+// Calculate returns RSI indicator values
+func (s *RSIStrategy) Calculate(candles []common.Candle) map[string][]float64 {
+	// Convert candles to bars
+	bars := make([]common.Bar, len(candles))
+	for i, c := range candles {
+		bars[i] = common.Bar{
+			Time:   c.Timestamp.Unix(),
+			Open:   c.Open,
+			High:   c.High,
+			Low:    c.Low,
+			Close:  c.Close,
+			Volume: c.Volume,
+		}
+	}
+
+	// Calculate RSI values
+	rsiValues, err := indicators.RSI(bars, s.period)
+	if err != nil {
+		return nil
+	}
+
+	// Prepare result
+	result := make(map[string][]float64)
+	result["RSI"] = make([]float64, len(candles))
+
+	// Fill result array
+	for i, v := range rsiValues {
+		result["RSI"][i] = v
+	}
+
+	return result
 }

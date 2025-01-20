@@ -15,24 +15,23 @@ type Bar struct {
 }
 
 type Candle struct {
-	Timestamp time.Time
-	Open      float64
-	Close     float64
-	High      float64
-	Low       float64
+	Timestamp  time.Time
+	Open       float64
+	Close      float64
+	High       float64
+	Low        float64
+	Volume     float64
+	Indicators map[string]interface{}
 }
 
 type DataPoint struct {
-	Timestamp     time.Time
-	Open          float64
-	High          float64
-	Low           float64
-	Close         float64
-	Volume        float64
-	MA5           float64 // 5日移动平均线
-	MACD          float64
-	Signal        float64
-	MACDHistogram float64
+	Timestamp  time.Time
+	Open       float64
+	High       float64
+	Low        float64
+	Close      float64
+	Volume     float64
+	Indicators map[string]float64
 }
 
 type Trade struct {
@@ -42,6 +41,7 @@ type Trade struct {
 	Quantity  float64
 	Type      Action
 	Fee       float64
+	Strategy  string
 }
 
 type Action int
@@ -68,6 +68,12 @@ type MACDValue struct {
 	MACD      float64
 	Signal    float64
 	Histogram float64
+}
+
+type RSIValue struct {
+	Fast   float64
+	Medium float64
+	Slow   float64
 }
 
 // 交易费用配置

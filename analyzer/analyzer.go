@@ -92,13 +92,18 @@ func (a *Analyzer) AverageProfitLoss() (float64, float64) {
 	var totalProfit, totalLoss float64
 	var profitCount, lossCount int
 
-	for _, trade := range a.trades {
-		if trade.Type == common.ActionSell {
-			if trade.Price > 0 {
-				totalProfit += trade.Price
+	// 按交易对计算盈亏
+	for i := 0; i < len(a.trades)-1; i += 2 {
+		buy := a.trades[i]
+		sell := a.trades[i+1]
+
+		if buy.Type == common.ActionBuy && sell.Type == common.ActionSell {
+			profit := sell.Price - buy.Price
+			if profit > 0 {
+				totalProfit += profit
 				profitCount++
 			} else {
-				totalLoss += math.Abs(trade.Price)
+				totalLoss += math.Abs(profit)
 				lossCount++
 			}
 		}

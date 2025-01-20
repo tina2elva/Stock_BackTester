@@ -32,7 +32,7 @@ func main() {
 	// 初始化多个策略
 	strategies := []strategy.Strategy{
 		strategy.NewMACDStrategy(12, 26, 9),
-		strategy.NewRSIStrategy(14, 30, 70),
+		//strategy.NewRSIStrategy(14, 30, 70),
 	}
 
 	// 初始化费用配置
@@ -94,11 +94,23 @@ func main() {
 		candles := make([]common.Candle, len(data))
 		for i, dp := range data {
 			candles[i] = common.Candle{
-				Timestamp: dp.Timestamp,
-				Open:      dp.Open,
-				High:      dp.High,
-				Low:       dp.Low,
-				Close:     dp.Close,
+				Timestamp:  dp.Timestamp,
+				Open:       dp.Open,
+				High:       dp.High,
+				Low:        dp.Low,
+				Close:      dp.Close,
+				Volume:     dp.Volume,
+				Indicators: make(map[string]interface{}),
+			}
+		}
+
+		// 计算并填充指标数据
+		for _, strategy := range strategies {
+			indicatorValues := strategy.Calculate(candles)
+			for indicatorName, values := range indicatorValues {
+				for i := range candles {
+					candles[i].Indicators[indicatorName] = values[i]
+				}
 			}
 		}
 

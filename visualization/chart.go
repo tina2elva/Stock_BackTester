@@ -18,14 +18,81 @@ func NewChart(title string) *Chart {
 }
 
 func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]common.Trade, outputFile string) error {
+	// 创建页面
+	page := components.NewPage()
+
 	// 创建K线图
 	kline := charts.NewKLine()
+
+	// 创建交易量柱状图
+	volume := charts.NewBar()
+	volume.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title: "交易量",
+			Left:  "center",
+		}),
+		charts.WithXAxisOpts(opts.XAxis{
+			Name: "日期",
+			Type: "category",
+			AxisLabel: &opts.AxisLabel{
+				Rotate: 45,
+			},
+		}),
+		charts.WithYAxisOpts(opts.YAxis{
+			Name: "交易量",
+		}),
+	)
+
+	// 创建MACD图表
+	macdChart := charts.NewLine()
+	macdChart.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title: "MACD",
+			Left:  "center",
+		}),
+		charts.WithXAxisOpts(opts.XAxis{
+			Name: "日期",
+			Type: "category",
+			AxisLabel: &opts.AxisLabel{
+				Rotate: 45,
+			},
+		}),
+		charts.WithYAxisOpts(opts.YAxis{
+			Name: "MACD",
+		}),
+	)
+
+	// 创建RSI图表
+	rsiChart := charts.NewLine()
+	rsiChart.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title: "RSI",
+			Left:  "center",
+		}),
+		charts.WithXAxisOpts(opts.XAxis{
+			Name: "日期",
+			Type: "category",
+			AxisLabel: &opts.AxisLabel{
+				Rotate: 45,
+			},
+		}),
+		charts.WithYAxisOpts(opts.YAxis{
+			Name: "RSI",
+		}),
+	)
 
 	// 准备K线数据
 	x := make([]string, 0, len(data))
 	y := make([]opts.KlineData, 0, len(data))
+	volumeData := make([]opts.BarData, 0, len(data))
+	macdLineData := make([]opts.LineData, 0, len(data))
+	signalLineData := make([]opts.LineData, 0, len(data))
+	histogramData := make([]opts.BarData, 0, len(data))
+	rsiData := make([]opts.LineData, 0, len(data))
+
 	for _, candle := range data {
-		x = append(x, candle.Timestamp.Format("2006-01-02"))
+		date := candle.Timestamp.Format("2006-01-02")
+		x = append(x, date)
 		y = append(y, opts.KlineData{
 			Value: [4]float32{
 				float32(candle.Open),
@@ -34,6 +101,45 @@ func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]com
 				float32(candle.High),
 			},
 		})
+		volumeData = append(volumeData, opts.BarData{
+			Value: float32(candle.Volume),
+		})
+		if macdValues, ok := candle.Indicators["MACD"]; ok {
+			if macdMap, ok := macdValues.(map[string][]float64); ok {
+				for name, values := range macdMap {
+					if len(values) > 0 {
+						switch name {
+						case "MACD":
+							macdLineData = append(macdLineData, opts.LineData{
+								Value: float32(values[len(values)-1]),
+								Name:  "MACD线",
+							})
+						case "Signal":
+							signalLineData = append(signalLineData, opts.LineData{
+								Value: float32(values[len(values)-1]),
+								Name:  "信号线",
+							})
+						case "Histogram":
+							histogramData = append(histogramData, opts.BarData{
+								Value: float32(values[len(values)-1]),
+							})
+						}
+					}
+				}
+			}
+		}
+		if rsiValues, ok := candle.Indicators["RSI"]; ok {
+			if rsiMap, ok := rsiValues.(map[string][]float64); ok {
+				for name, values := range rsiMap {
+					if len(values) > 0 {
+						rsiData = append(rsiData, opts.LineData{
+							Value: float32(values[len(values)-1]),
+							Name:  name,
+						})
+					}
+				}
+			}
+		}
 	}
 
 	// 准备买卖点数据
@@ -117,9 +223,44 @@ func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]com
 		}),
 	)
 
+	// 设置图表数据
+	kline.SetXAxis(x).AddSeries("K线", y).SetSeriesOptions(
+		charts.WithItemStyleOpts(opts.ItemStyle{
+			Color:        "#ec0000",
+			Color0:       "#00da3c",
+			BorderColor:  "#8A0000",
+			BorderColor0: "#008F28",
+		}),
+	)
+
+	volume.SetXAxis(x).AddSeries("交易量", volumeData)
+	// 创建MACD柱状图
+	macdBar := charts.NewBar()
+	macdBar.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title: "MACD柱状图",
+			Left:  "center",
+		}),
+		charts.WithXAxisOpts(opts.XAxis{
+			Name: "日期",
+			Type: "category",
+			AxisLabel: &opts.AxisLabel{
+				Rotate: 45,
+			},
+		}),
+		charts.WithYAxisOpts(opts.YAxis{
+			Name: "MACD柱状图",
+		}),
+	)
+	macdBar.SetXAxis(x).AddSeries("MACD柱状图", histogramData)
+
+	macdChart.SetXAxis(x).
+		AddSeries("MACD线", macdLineData).
+		AddSeries("信号线", signalLineData)
+	rsiChart.SetXAxis(x).AddSeries("RSI", rsiData)
+
 	// 组合图表
-	page := components.NewPage()
-	chartsToAdd := []components.Charter{kline}
+	chartsToAdd := []components.Charter{kline, volume, macdBar, macdChart, rsiChart}
 	for _, scatter := range scatterSeries {
 		chartsToAdd = append(chartsToAdd, scatter)
 	}

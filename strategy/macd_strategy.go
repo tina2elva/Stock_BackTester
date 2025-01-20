@@ -23,6 +23,10 @@ func NewMACDStrategy(fast, slow, signal int) *MACDStrategy {
 	}
 }
 
+func (s *MACDStrategy) Name() string {
+	return "MACD Strategy"
+}
+
 func (s *MACDStrategy) Run(data []common.Bar) []common.Signal {
 	signals := make([]common.Signal, len(data))
 
@@ -106,7 +110,8 @@ func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio
 	if prevMACD < prevSignal && currentMACD > currentSignal {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
+		log.Printf("[交易日志] 策略: %s | 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
+			s.Name(),
 			data.Timestamp.Format("2006-01-02 15:04:05"),
 			data.Close,
 			quantity,
@@ -115,7 +120,8 @@ func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio
 	} else if prevMACD > prevSignal && currentMACD < currentSignal {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Sell(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
+		log.Printf("[交易日志] 策略: %s | 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
+			s.Name(),
 			data.Timestamp.Format("2006-01-02 15:04:05"),
 			data.Close,
 			quantity,
@@ -130,4 +136,41 @@ func (s *MACDStrategy) OnEnd(portfolio common.Portfolio) {
 	if closer, ok := portfolio.(interface{ CloseAllPositions() }); ok {
 		closer.CloseAllPositions()
 	}
+}
+
+// Calculate returns MACD indicator values
+func (s *MACDStrategy) Calculate(candles []common.Candle) map[string][]float64 {
+	// Convert candles to bars
+	bars := make([]common.Bar, len(candles))
+	for i, c := range candles {
+		bars[i] = common.Bar{
+			Time:   c.Timestamp.Unix(),
+			Open:   c.Open,
+			High:   c.High,
+			Low:    c.Low,
+			Close:  c.Close,
+			Volume: c.Volume,
+		}
+	}
+
+	// Calculate MACD values
+	macdValues, err := indicators.MACD(bars, s.fastPeriod, s.slowPeriod, s.signalPeriod)
+	if err != nil {
+		return nil
+	}
+
+	// Prepare result
+	result := make(map[string][]float64)
+	result["MACD"] = make([]float64, len(candles))
+	result["Signal"] = make([]float64, len(candles))
+	result["Histogram"] = make([]float64, len(candles))
+
+	// Fill result arrays
+	for i, v := range macdValues {
+		result["MACD"][i] = v.MACD
+		result["Signal"][i] = v.Signal
+		result["Histogram"][i] = v.Histogram
+	}
+
+	return result
 }
