@@ -7,17 +7,22 @@ import (
 	"stock/common"
 	"stock/portfolio"
 	"stock/strategy"
+	"sync"
 )
 
 type Backtest struct {
 	data       []*common.DataPoint
 	strategies []strategy.Strategy
-	portfolio  *portfolio.Portfolio
+	portfolios []*portfolio.Portfolio
 	feeConfig  common.FeeConfig
 }
 
 func (b *Backtest) AddStrategy(strategy strategy.Strategy) {
 	b.strategies = append(b.strategies, strategy)
+	// 为每个策略创建一个对应的portfolio
+	broker := broker.NewSimulatedBroker(0.0003) // 使用默认佣金率
+	initialCash := 100000.0                     // 默认初始资金
+	b.portfolios = append(b.portfolios, portfolio.NewPortfolio(initialCash, broker))
 }
 
 type PerformanceMetrics struct {
@@ -41,14 +46,11 @@ type BacktestResults struct {
 }
 
 func NewBacktest(data []*common.DataPoint, initialCash float64, feeConfig common.FeeConfig, broker broker.Broker) *Backtest {
-	// 创建投资组合
-	p := portfolio.NewPortfolio(initialCash, broker)
-
 	return &Backtest{
 		data:       data,
-		portfolio:  p,
 		feeConfig:  feeConfig,
 		strategies: []strategy.Strategy{},
+		portfolios: []*portfolio.Portfolio{},
 	}
 }
 
@@ -64,39 +66,46 @@ func DefaultFeeConfig() common.FeeConfig {
 }
 
 func (b *Backtest) Run() {
-	for _, dataPoint := range b.data {
-		for _, strategy := range b.strategies {
-			// Log which strategy is being executed
-			log.Printf("[策略执行] %T 处理数据点: %s", strategy, dataPoint.Timestamp)
-			strategy.OnData(dataPoint, b.portfolio)
-		}
+	var wg sync.WaitGroup
+	wg.Add(len(b.strategies))
+
+	for i := range b.strategies {
+		go func(index int) {
+			defer wg.Done()
+			for _, dataPoint := range b.data {
+				log.Printf("[策略执行] %T 处理数据点: %s", b.strategies[index], dataPoint.Timestamp)
+				b.strategies[index].OnData(dataPoint, b.portfolios[index])
+			}
+			log.Printf("[策略结束] %T 执行结束处理", b.strategies[index])
+			b.strategies[index].OnEnd(b.portfolios[index])
+		}(i)
 	}
-	for _, strategy := range b.strategies {
-		log.Printf("[策略结束] %T 执行结束处理", strategy)
-		strategy.OnEnd(b.portfolio)
-	}
+	wg.Wait()
 }
 
-func (b *Backtest) Results() *BacktestResults {
-	results := &BacktestResults{
-		FinalValue:  b.portfolio.Balance(),
-		Positions:   map[string]float64{"asset": b.portfolio.PositionSize("asset")},
-		Cash:        b.portfolio.AvailableCash(),
-		Trades:      b.portfolio.Transactions(),
-		EquityCurve: b.calculateEquityCurve(),
-	}
+func (b *Backtest) Results() []*BacktestResults {
+	var results []*BacktestResults
 
-	// Calculate performance metrics
-	results.Metrics = b.calculateMetrics(results)
+	for i := range b.strategies {
+		result := &BacktestResults{
+			FinalValue:  b.portfolios[i].Balance(),
+			Positions:   b.portfolios[i].GetPositions(),
+			Cash:        b.portfolios[i].AvailableCash(),
+			Trades:      b.portfolios[i].Transactions(),
+			EquityCurve: b.calculateEquityCurve(b.portfolios[i]),
+		}
+		result.Metrics = b.calculateMetrics(result, b.portfolios[i])
+		results = append(results, result)
+	}
 	return results
 }
 
-func (b *Backtest) calculateEquityCurve() []float64 {
+func (b *Backtest) calculateEquityCurve(p *portfolio.Portfolio) []float64 {
 	var equityCurve []float64
-	initialValue := b.portfolio.AvailableCash()
+	initialValue := p.AvailableCash()
 	currentValue := initialValue
 
-	for _, trade := range b.portfolio.Transactions() {
+	for _, trade := range p.Transactions() {
 		tradeValue := trade.Price * trade.Quantity
 		if trade.Type == common.ActionBuy {
 			currentValue -= tradeValue
@@ -108,7 +117,7 @@ func (b *Backtest) calculateEquityCurve() []float64 {
 	return equityCurve
 }
 
-func (b *Backtest) calculateMetrics(results *BacktestResults) PerformanceMetrics {
+func (b *Backtest) calculateMetrics(results *BacktestResults, p *portfolio.Portfolio) PerformanceMetrics {
 	metrics := PerformanceMetrics{
 		NumTrades: len(results.Trades),
 	}
@@ -120,7 +129,7 @@ func (b *Backtest) calculateMetrics(results *BacktestResults) PerformanceMetrics
 	// Calculate returns and drawdowns
 	var returns []float64
 	var equityCurve []float64
-	initialValue := b.portfolio.GetInitialValue()
+	initialValue := p.GetInitialValue()
 	currentValue := initialValue
 
 	for _, trade := range results.Trades {
