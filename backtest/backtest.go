@@ -1,17 +1,23 @@
 package backtest
 
 import (
+	"log"
 	"math"
+	"stock/broker"
 	"stock/common"
 	"stock/portfolio"
 	"stock/strategy"
 )
 
 type Backtest struct {
-	data      []*common.DataPoint
-	strategy  strategy.Strategy
-	portfolio *portfolio.Portfolio
-	feeConfig common.FeeConfig
+	data       []*common.DataPoint
+	strategies []strategy.Strategy
+	portfolio  *portfolio.Portfolio
+	feeConfig  common.FeeConfig
+}
+
+func (b *Backtest) AddStrategy(strategy strategy.Strategy) {
+	b.strategies = append(b.strategies, strategy)
 }
 
 type PerformanceMetrics struct {
@@ -34,23 +40,15 @@ type BacktestResults struct {
 	EquityCurve []float64
 }
 
-func NewBacktest(data []*common.DataPoint, strategy strategy.Strategy, initialCash float64, feeConfig common.FeeConfig) *Backtest {
+func NewBacktest(data []*common.DataPoint, initialCash float64, feeConfig common.FeeConfig, broker broker.Broker) *Backtest {
 	// 创建投资组合
-	p := portfolio.NewPortfolio(initialCash)
-
-	// 初始化费用计算器
-	feeCalculator := &common.DefaultFeeCalculator{
-		Config: feeConfig,
-	}
-
-	// 设置费用计算器
-	p.SetFeeCalculator(feeCalculator)
+	p := portfolio.NewPortfolio(initialCash, broker)
 
 	return &Backtest{
-		data:      data,
-		strategy:  strategy,
-		portfolio: p,
-		feeConfig: feeConfig,
+		data:       data,
+		portfolio:  p,
+		feeConfig:  feeConfig,
+		strategies: []strategy.Strategy{},
 	}
 }
 
@@ -67,9 +65,16 @@ func DefaultFeeConfig() common.FeeConfig {
 
 func (b *Backtest) Run() {
 	for _, dataPoint := range b.data {
-		b.strategy.OnData(dataPoint, b.portfolio)
+		for _, strategy := range b.strategies {
+			// Log which strategy is being executed
+			log.Printf("[策略执行] %T 处理数据点: %s", strategy, dataPoint.Timestamp)
+			strategy.OnData(dataPoint, b.portfolio)
+		}
 	}
-	b.strategy.OnEnd(b.portfolio)
+	for _, strategy := range b.strategies {
+		log.Printf("[策略结束] %T 执行结束处理", strategy)
+		strategy.OnEnd(b.portfolio)
+	}
 }
 
 func (b *Backtest) Results() *BacktestResults {

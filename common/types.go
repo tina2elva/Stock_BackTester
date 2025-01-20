@@ -1,6 +1,9 @@
 package common
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type Bar struct {
 	Time   int64
@@ -39,6 +42,11 @@ const (
 	ActionBuy Action = iota
 	ActionSell
 	ActionHold
+)
+
+var (
+	ErrInsufficientFunds    = errors.New("insufficient funds")
+	ErrInsufficientPosition = errors.New("insufficient position")
 )
 
 type Signal struct {
@@ -106,8 +114,6 @@ type Portfolio interface {
 	Transactions() []Trade
 	GetPositions() map[string]float64
 	GetTrades() []Trade
-	Buy(timestamp time.Time, price float64, quantity float64)
-	Sell(timestamp time.Time, price float64, quantity float64)
-	SetFeeCalculator(calculator FeeCalculator)
-	CalculateTradeCost(action Action, price float64, quantity float64) float64
+	Buy(timestamp time.Time, price float64, quantity float64) error
+	Sell(timestamp time.Time, price float64, quantity float64) error
 }

@@ -92,20 +92,18 @@ func (s *RSIStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio)
 	if currentRSI < s.oversold {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | 费用: %.2f | RSI: %.2f",
+		log.Printf("[交易日志] 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | RSI: %.2f",
 			data.Timestamp.Format("2006-01-02 15:04:05"),
 			data.Close,
 			quantity,
-			portfolio.CalculateTradeCost(common.ActionBuy, data.Close, quantity),
 			currentRSI)
 	} else if currentRSI > s.overbought {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Sell(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | 费用: %.2f | RSI: %.2f",
+		log.Printf("[交易日志] 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | RSI: %.2f",
 			data.Timestamp.Format("2006-01-02 15:04:05"),
 			data.Close,
 			quantity,
-			portfolio.CalculateTradeCost(common.ActionSell, data.Close, quantity),
 			currentRSI)
 	}
 }

@@ -1,6 +1,7 @@
 package portfolio
 
 import (
+	"stock/broker"
 	"stock/common"
 	"time"
 )
@@ -11,16 +12,17 @@ type Portfolio struct {
 	positions     map[string]float64
 	trades        []common.Trade
 	positionSizes map[string]float64
-	feeCalculator common.FeeCalculator
+	broker        broker.Broker
 }
 
-func NewPortfolio(initialCash float64) *Portfolio {
+func NewPortfolio(initialCash float64, broker broker.Broker) *Portfolio {
 	return &Portfolio{
 		cash:          initialCash,
 		initialCash:   initialCash,
 		positions:     make(map[string]float64),
 		trades:        make([]common.Trade, 0),
 		positionSizes: make(map[string]float64),
+		broker:        broker,
 	}
 }
 
@@ -48,75 +50,56 @@ func (p *Portfolio) Transactions() []common.Trade {
 	return p.trades
 }
 
-func (p *Portfolio) SetFeeCalculator(calculator common.FeeCalculator) {
-	p.feeCalculator = calculator
-}
-
-func (p *Portfolio) CalculateTradeCost(action common.Action, price float64, quantity float64) float64 {
-	if p.feeCalculator == nil {
-		return 0
-	}
-	return p.feeCalculator.CalculateFee(action, price, quantity)
-}
-
-func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) {
-	// 计算实际价格（考虑滑点）
-	actualPrice := price
-	if p.feeCalculator != nil {
-		actualPrice = p.feeCalculator.GetActualPrice(common.ActionBuy, price)
+func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) error {
+	err := p.broker.Buy(timestamp, price, quantity)
+	if err != nil {
+		return err
 	}
 
-	// 计算总成本（包括交易费用）
-	totalCost := actualPrice * quantity
-	if p.feeCalculator != nil {
-		totalCost += p.feeCalculator.CalculateFee(common.ActionBuy, actualPrice, quantity)
-	}
+	cost := price * quantity
+	fee := p.broker.CalculateTradeCost(common.ActionBuy, price, quantity)
+	totalCost := cost + fee
 
 	if p.cash >= totalCost {
-		// 扣除总成本
 		p.cash -= totalCost
-		// 更新持仓
 		p.positions["asset"] += quantity
-		p.positionSizes["asset"] += actualPrice * quantity
-		// 记录交易
+		p.positionSizes["asset"] += price * quantity
 		p.trades = append(p.trades, common.Trade{
 			Timestamp: timestamp,
-			Price:     actualPrice,
+			Price:     price,
 			Quantity:  quantity,
 			Type:      common.ActionBuy,
-			Fee:       p.feeCalculator.CalculateFee(common.ActionBuy, actualPrice, quantity),
+			Fee:       fee,
 		})
 	}
+	return nil
 }
 
-func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) {
-	if p.positions["asset"] >= quantity {
-		// 计算实际价格（考虑滑点）
-		actualPrice := price
-		if p.feeCalculator != nil {
-			actualPrice = p.feeCalculator.GetActualPrice(common.ActionSell, price)
-		}
-
-		// 计算总收入（扣除交易费用）
-		totalCost := actualPrice * quantity
-		if p.feeCalculator != nil {
-			totalCost -= p.feeCalculator.CalculateFee(common.ActionSell, actualPrice, quantity)
-		}
-
-		// 更新现金
-		p.cash += totalCost
-		// 更新持仓
-		p.positions["asset"] -= quantity
-		p.positionSizes["asset"] -= actualPrice * quantity
-		// 记录交易
-		p.trades = append(p.trades, common.Trade{
-			Timestamp: timestamp,
-			Price:     actualPrice,
-			Quantity:  quantity,
-			Type:      common.ActionSell,
-			Fee:       p.feeCalculator.CalculateFee(common.ActionSell, actualPrice, quantity),
-		})
+func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) error {
+	if p.positions["asset"] < quantity {
+		return common.ErrInsufficientPosition
 	}
+
+	err := p.broker.Sell(timestamp, price, quantity)
+	if err != nil {
+		return err
+	}
+
+	proceeds := price * quantity
+	fee := p.broker.CalculateTradeCost(common.ActionSell, price, quantity)
+	totalProceeds := proceeds - fee
+
+	p.cash += totalProceeds
+	p.positions["asset"] -= quantity
+	p.positionSizes["asset"] -= price * quantity
+	p.trades = append(p.trades, common.Trade{
+		Timestamp: timestamp,
+		Price:     price,
+		Quantity:  quantity,
+		Type:      common.ActionSell,
+		Fee:       fee,
+	})
+	return nil
 }
 
 func (p *Portfolio) GetPositions() map[string]float64 {

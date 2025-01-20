@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"stock/analyzer"
 	"stock/backtest"
+	"stock/broker"
 	"stock/datasource"
 	"stock/strategy"
 	"stock/visualization"
@@ -23,13 +25,26 @@ func main() {
 		log.Fatalf("获取数据失败: %v", err)
 	}
 
-	// 初始化MACD策略
+	// 初始化多个策略
+	strategies := []strategy.Strategy{
+		strategy.NewMACDStrategy(12, 26, 9),
+		strategy.NewRSIStrategy(14, 30, 70),
+	}
+
 	// 初始化费用配置
 	feeConfig := backtest.DefaultFeeConfig()
 
-	// 初始化RSI策略
-	rsiStrategy := strategy.NewRSIStrategy(14, 30, 70)
-	bt := backtest.NewBacktest(data, rsiStrategy, 100000, feeConfig) // 初始资金10万
+	// 初始资金
+	initialCash := 100000.0
+
+	// 初始化broker
+	broker := broker.NewSimulatedBroker(feeConfig.Commission)
+
+	// 初始化回测引擎
+	bt := backtest.NewBacktest(data, initialCash, feeConfig, broker)
+	for _, strategy := range strategies {
+		bt.AddStrategy(strategy)
+	}
 
 	// 运行回测
 	bt.Run()
@@ -37,17 +52,34 @@ func main() {
 	// 获取回测结果
 	results := bt.Results()
 
+	// 初始化analyzer
+	analyzer := analyzer.NewAnalyzer(results.Trades, initialCash)
+
+	// 计算关键指标
+	finalValue := results.FinalValue
+	duration := endDate.Sub(startDate)
+	totalReturn := analyzer.TotalReturn(finalValue)
+	annualizedReturn := analyzer.AnnualizedReturn(finalValue, duration)
+	maxDrawdown := analyzer.MaxDrawdown(results.EquityCurve)
+	winRate := analyzer.WinRate()
+	avgProfit, avgLoss := analyzer.AverageProfitLoss()
+	profitLossRatio := analyzer.ProfitLossRatio()
+
 	// 输出回测结果
-	fmt.Println("回测结果:")
-	fmt.Printf("初始资金: %.2f\n", 100000.0)
-	fmt.Printf("最终资产: %.2f\n", results.FinalValue)
-	fmt.Printf("收益率: %.2f%%\n", (results.FinalValue-100000)/100000*100)
-	fmt.Printf("最大回撤: %.2f%%\n", results.Metrics.MaxDrawdown*100)
-	fmt.Printf("交易次数: %d\n", results.Metrics.NumTrades)
-	fmt.Printf("胜率: %.2f%%\n", results.Metrics.WinRate*100)
+	fmt.Println("\n回测结果:")
+	fmt.Printf("初始资金: %.2f\n", initialCash)
+	fmt.Printf("最终资产: %.2f\n", finalValue)
+	fmt.Printf("总收益率: %.2f%%\n", totalReturn*100)
+	fmt.Printf("年化收益率: %.2f%%\n", annualizedReturn*100)
+	fmt.Printf("最大回撤: %.2f%%\n", maxDrawdown*100)
+	fmt.Printf("交易次数: %d\n", len(results.Trades))
+	fmt.Printf("胜率: %.2f%%\n", winRate*100)
+	fmt.Printf("平均盈利: %.2f\n", avgProfit)
+	fmt.Printf("平均亏损: %.2f\n", avgLoss)
+	fmt.Printf("盈亏比: %.2f\n", profitLossRatio)
 
 	// 可视化结果
-	chart := visualization.NewChart("招商银行 RSI策略回测")
+	chart := visualization.NewChart("招商银行 MACD策略回测")
 	err = chart.PlotCandlestick(data, "cmb_candlestick.png")
 	if err != nil {
 		log.Fatalf("生成图表失败: %v", err)
@@ -60,14 +92,15 @@ func main() {
 	}
 	defer file.Close()
 
-	file.WriteString("时间,类型,价格,数量\n")
+	file.WriteString("时间,类型,价格,数量,费用\n")
 	for _, trade := range results.Trades {
-		file.WriteString(fmt.Sprintf("%s,%s,%.2f,%.2f\n",
+		file.WriteString(fmt.Sprintf("%s,%s,%.2f,%.2f,%.2f\n",
 			trade.Timestamp.Format("2006-01-02"),
 			trade.Type,
 			trade.Price,
-			trade.Quantity))
+			trade.Quantity,
+			trade.Fee))
 	}
 
-	fmt.Println("回测完成，结果已保存到 cmb_candlestick.png 和 cmb_trades.csv")
+	fmt.Println("\n回测完成，结果已保存到 cmb_candlestick.png 和 cmb_trades.csv")
 }
