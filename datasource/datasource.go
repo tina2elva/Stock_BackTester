@@ -42,9 +42,9 @@ func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*common
 	for _, record := range records[1:] { // 跳过表头
 		timestamp, _ := time.Parse("2006-01-02", record[0])
 		open, _ := strconv.ParseFloat(record[1], 64)
-		high, _ := strconv.ParseFloat(record[2], 64)
-		low, _ := strconv.ParseFloat(record[3], 64)
-		close, _ := strconv.ParseFloat(record[4], 64)
+		close, _ := strconv.ParseFloat(record[2], 64)
+		high, _ := strconv.ParseFloat(record[3], 64)
+		low, _ := strconv.ParseFloat(record[4], 64)
 		volume, _ := strconv.ParseFloat(record[5], 64)
 
 		if timestamp.After(start) && timestamp.Before(end) {

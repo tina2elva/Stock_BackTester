@@ -26,12 +26,14 @@ func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]com
 	y := make([]opts.KlineData, 0, len(data))
 	for _, candle := range data {
 		x = append(x, candle.Timestamp.Format("2006-01-02"))
-		y = append(y, opts.KlineData{Value: [4]float32{
-			float32(candle.Open),
-			float32(candle.Close),
-			float32(candle.Low),
-			float32(candle.High),
-		}})
+		y = append(y, opts.KlineData{
+			Value: [4]float32{
+				float32(candle.Open),
+				float32(candle.Close),
+				float32(candle.Low),
+				float32(candle.High),
+			},
+		})
 	}
 
 	// 准备买卖点数据
@@ -89,21 +91,31 @@ func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]com
 			Name: "价格",
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
-			Type:  "inside",
-			Start: 0,
-			End:   100,
+			Type:       "inside",
+			Start:      50,
+			End:        100,
+			XAxisIndex: []int{0},
 		}),
-		charts.WithTooltipOpts(opts.Tooltip{
-			Trigger:   "axis",
-			TriggerOn: "mousemove",
+		charts.WithDataZoomOpts(opts.DataZoom{
+			Type:       "slider",
+			Start:      50,
+			End:        100,
+			XAxisIndex: []int{0},
 		}),
-		charts.WithLegendOpts(opts.Legend{
-			Data: legendData,
+		charts.WithXAxisOpts(opts.XAxis{
+			SplitNumber: 20,
 		}),
 	)
 
 	// 添加K线数据
-	kline.SetXAxis(x).AddSeries("K线", y)
+	kline.SetXAxis(x).AddSeries("K线", y).SetSeriesOptions(
+		charts.WithItemStyleOpts(opts.ItemStyle{
+			Color:        "#ec0000",
+			Color0:       "#00da3c",
+			BorderColor:  "#8A0000",
+			BorderColor0: "#008F28",
+		}),
+	)
 
 	// 组合图表
 	page := components.NewPage()
