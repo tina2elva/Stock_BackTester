@@ -1,98 +1,125 @@
 package visualization
 
 import (
-	"image/color"
-	"stock/backtest"
+	"os"
 	"stock/common"
 
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/vg"
+	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/components"
+	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
 type Chart struct {
-	title  string
-	width  vg.Length
-	height vg.Length
+	title string
 }
 
 func NewChart(title string) *Chart {
-	return &Chart{
-		title:  title,
-		width:  20 * vg.Centimeter,
-		height: 10 * vg.Centimeter,
-	}
+	return &Chart{title: title}
 }
 
-func (c *Chart) PlotEquityCurve(results *backtest.BacktestResults, filePath string) error {
-	p := plot.New()
-	p.Title.Text = c.title
-	p.X.Label.Text = "Time"
-	p.Y.Label.Text = "Equity"
+func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]common.Trade, outputFile string) error {
+	// 创建K线图
+	kline := charts.NewKLine()
 
-	pts := make(plotter.XYs, len(results.EquityCurve))
-	for i, v := range results.EquityCurve {
-		pts[i].X = float64(i)
-		pts[i].Y = v
+	// 准备K线数据
+	x := make([]string, 0, len(data))
+	y := make([]opts.KlineData, 0, len(data))
+	for _, candle := range data {
+		x = append(x, candle.Timestamp.Format("2006-01-02"))
+		y = append(y, opts.KlineData{Value: [4]float32{
+			float32(candle.Open),
+			float32(candle.Close),
+			float32(candle.Low),
+			float32(candle.High),
+		}})
 	}
 
-	line, err := plotter.NewLine(pts)
+	// 准备买卖点数据
+	//colors := []string{"green", "blue", "orange", "purple", "brown"}
+	legendData := []string{"K线"}
+	scatterSeries := make([]*charts.Scatter, 0)
+
+	for strategyName, trades := range tradesMap {
+		//color := colors[len(scatterSeries)%len(colors)]
+		buyPoints := make([]opts.ScatterData, 0)
+		sellPoints := make([]opts.ScatterData, 0)
+
+		for _, trade := range trades {
+			date := trade.Timestamp.Format("2006-01-02")
+			price := float32(trade.Price)
+			if trade.Type == common.ActionBuy {
+				buyPoints = append(buyPoints, opts.ScatterData{
+					Value:      []interface{}{date, price},
+					Symbol:     "circle",
+					SymbolSize: 10,
+				})
+			} else if trade.Type == common.ActionSell {
+				sellPoints = append(sellPoints, opts.ScatterData{
+					Value:      []interface{}{date, price},
+					Symbol:     "circle",
+					SymbolSize: 10,
+				})
+			}
+		}
+
+		// 创建散点图用于买卖点
+		scatter := charts.NewScatter()
+		scatter.SetXAxis(x).
+			AddSeries(strategyName+" 买入", buyPoints).
+			AddSeries(strategyName+" 卖出", sellPoints)
+
+		scatterSeries = append(scatterSeries, scatter)
+		legendData = append(legendData, strategyName+" 买入", strategyName+" 卖出")
+	}
+
+	// 设置K线图选项
+	kline.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title: c.title,
+			Left:  "center",
+		}),
+		charts.WithXAxisOpts(opts.XAxis{
+			Name: "日期",
+			Type: "category",
+			AxisLabel: &opts.AxisLabel{
+				Rotate: 45,
+			},
+		}),
+		charts.WithYAxisOpts(opts.YAxis{
+			Name: "价格",
+		}),
+		charts.WithDataZoomOpts(opts.DataZoom{
+			Type:  "inside",
+			Start: 0,
+			End:   100,
+		}),
+		charts.WithTooltipOpts(opts.Tooltip{
+			Trigger:   "axis",
+			TriggerOn: "mousemove",
+		}),
+		charts.WithLegendOpts(opts.Legend{
+			Data: legendData,
+		}),
+	)
+
+	// 添加K线数据
+	kline.SetXAxis(x).AddSeries("K线", y)
+
+	// 组合图表
+	page := components.NewPage()
+	chartsToAdd := []components.Charter{kline}
+	for _, scatter := range scatterSeries {
+		chartsToAdd = append(chartsToAdd, scatter)
+	}
+	page.AddCharts(chartsToAdd...)
+
+	// 保存图表
+	f, err := os.Create(outputFile)
 	if err != nil {
 		return err
 	}
-	line.Color = color.RGBA{R: 0, G: 0, B: 255, A: 255}
+	defer f.Close()
 
-	p.Add(line)
-	p.Legend.Add("Equity", line)
-
-	return p.Save(c.width, c.height, filePath)
-}
-
-func (c *Chart) PlotCandlestick(data []*common.DataPoint, filePath string) error {
-	p := plot.New()
-	p.Title.Text = c.title
-	p.X.Label.Text = "Time"
-	p.Y.Label.Text = "Price"
-
-	// Create candlestick plot using lines
-	for i, d := range data {
-		// Determine color based on price movement
-		var lineColor color.Color
-		if d.Close >= d.Open {
-			lineColor = color.RGBA{R: 0, G: 128, B: 0, A: 255} // Green for up
-		} else {
-			lineColor = color.RGBA{R: 255, G: 0, B: 0, A: 255} // Red for down
-		}
-
-		// Draw high-low line
-		highLow := plotter.XYs{
-			{X: float64(i), Y: d.Low},
-			{X: float64(i), Y: d.High},
-		}
-		hlLine, err := plotter.NewLine(highLow)
-		if err != nil {
-			return err
-		}
-		hlLine.LineStyle.Width = vg.Points(1)
-		hlLine.LineStyle.Color = lineColor
-		p.Add(hlLine)
-
-		// Draw open-close box
-		openClose := plotter.XYs{
-			{X: float64(i) - 0.2, Y: d.Open},
-			{X: float64(i) + 0.2, Y: d.Open},
-			{X: float64(i) + 0.2, Y: d.Close},
-			{X: float64(i) - 0.2, Y: d.Close},
-			{X: float64(i) - 0.2, Y: d.Open},
-		}
-		ocLine, err := plotter.NewLine(openClose)
-		if err != nil {
-			return err
-		}
-		ocLine.LineStyle.Width = vg.Points(2)
-		ocLine.LineStyle.Color = lineColor
-		p.Add(ocLine)
-	}
-
-	return p.Save(c.width, c.height, filePath)
+	// 使用HTML渲染器
+	return page.Render(f)
 }

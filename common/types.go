@@ -14,6 +14,14 @@ type Bar struct {
 	Volume float64
 }
 
+type Candle struct {
+	Timestamp time.Time
+	Open      float64
+	Close     float64
+	High      float64
+	Low       float64
+}
+
 type DataPoint struct {
 	Timestamp     time.Time
 	Open          float64

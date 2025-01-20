@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+	// required for Candle and Trade types
 	"stock/analyzer"
 	"stock/backtest"
 	"stock/broker"
+	"stock/common"
 	"stock/datasource"
 	"stock/strategy"
 	"stock/visualization"
@@ -88,10 +90,27 @@ func main() {
 		fmt.Printf("平均亏损: %.2f\n", avgLoss)
 		fmt.Printf("盈亏比: %.2f\n", profitLossRatio)
 
+		// 将DataPoint转换为Candle
+		candles := make([]common.Candle, len(data))
+		for i, dp := range data {
+			candles[i] = common.Candle{
+				Timestamp: dp.Timestamp,
+				Open:      dp.Open,
+				High:      dp.High,
+				Low:       dp.Low,
+				Close:     dp.Close,
+			}
+		}
+
+		// 按策略名称分组交易数据
+		tradesMap := map[string][]common.Trade{
+			strategyName: result.Trades,
+		}
+
 		// 可视化结果
 		chart := visualization.NewChart(fmt.Sprintf("招商银行 %s 策略回测", strategyName))
-		chartFile := fmt.Sprintf("cmb_%s_candlestick.png", strategyName)
-		err = chart.PlotCandlestick(data, chartFile)
+		chartFile := fmt.Sprintf("cmb_%s_candlestick.html", strategyName)
+		err = chart.PlotCandlestick(candles, tradesMap, chartFile)
 		if err != nil {
 			log.Fatalf("生成图表失败: %v", err)
 		}
