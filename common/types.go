@@ -61,7 +61,7 @@ type Signal struct {
 	Action Action
 	Price  float64
 	Time   int64
-	Qty    int // 交易数量（股数）
+	Qty    int
 }
 
 type MACDValue struct {
@@ -76,47 +76,23 @@ type RSIValue struct {
 	Slow   float64
 }
 
-// 交易费用配置
-type FeeConfig struct {
-	StampDuty  float64 // 印花税
-	Commission float64 // 佣金
-	Fee        float64 // 固定手续费
-	Slippage   float64 // 滑点
-	MinLotSize int     // 最小交易单位
+type Logger interface {
+	LogData(data *DataPoint)
+	LogTrade(trade Trade)
+	LogEnd(portfolio Portfolio)
 }
 
-// 交易费用计算器接口
+type FeeConfig struct {
+	StampDuty  float64
+	Commission float64
+	Fee        float64
+	Slippage   float64
+	MinLotSize int
+}
+
 type FeeCalculator interface {
 	CalculateFee(action Action, price float64, quantity float64) float64
 	GetActualPrice(action Action, price float64) float64
-}
-
-// 默认交易费用计算器
-type DefaultFeeCalculator struct {
-	Config FeeConfig
-}
-
-func (c *DefaultFeeCalculator) CalculateFee(action Action, price float64, quantity float64) float64 {
-	total := price * quantity
-	switch action {
-	case ActionBuy:
-		return total*(c.Config.StampDuty+c.Config.Commission) + c.Config.Fee
-	case ActionSell:
-		return total*c.Config.Commission + c.Config.Fee
-	default:
-		return 0
-	}
-}
-
-func (c *DefaultFeeCalculator) GetActualPrice(action Action, price float64) float64 {
-	switch action {
-	case ActionBuy:
-		return price * (1 + c.Config.Slippage)
-	case ActionSell:
-		return price * (1 - c.Config.Slippage)
-	default:
-		return price
-	}
 }
 
 type Portfolio interface {

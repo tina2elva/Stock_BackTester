@@ -1,7 +1,6 @@
 package strategy
 
 import (
-	"log"
 	"stock/common"
 	"stock/indicators"
 )
@@ -11,14 +10,16 @@ type RSIStrategy struct {
 	overbought float64
 	oversold   float64
 	dataBuffer []common.Bar
+	logger     common.Logger
 }
 
-func NewRSIStrategy(period int, overbought, oversold float64) *RSIStrategy {
+func NewRSIStrategy(period int, overbought, oversold float64, logger common.Logger) *RSIStrategy {
 	// 优化RSI参数
 	return &RSIStrategy{
 		period:     9,  // 缩短周期以提高灵敏度
 		overbought: 65, // 降低超买阈值
 		oversold:   35, // 提高超卖阈值
+		logger:     logger,
 	}
 }
 
@@ -66,6 +67,11 @@ func (s *RSIStrategy) Run(data []common.Bar) []common.Signal {
 }
 
 func (s *RSIStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio) {
+	// 记录数据
+	if s.logger != nil {
+		s.logger.LogData(data)
+	}
+
 	// 添加新数据点到缓冲区
 	s.dataBuffer = append(s.dataBuffer, common.Bar{
 		Time:   data.Timestamp.Unix(),
@@ -97,27 +103,34 @@ func (s *RSIStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio)
 	if currentRSI < s.oversold {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 策略: %s | 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
-			s.Name(),
-			data.Timestamp.Format("2006-01-02 15:04:05"),
-			data.Close,
-			quantity,
-			portfolio.AvailableCash(),
-			portfolio.PositionSize("asset"))
+		if s.logger != nil {
+			s.logger.LogTrade(common.Trade{
+				Timestamp: data.Timestamp,
+				Price:     data.Close,
+				Quantity:  quantity,
+				Type:      common.ActionBuy,
+			})
+		}
 	} else if currentRSI > s.overbought {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Sell(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 策略: %s | 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
-			s.Name(),
-			data.Timestamp.Format("2006-01-02 15:04:05"),
-			data.Close,
-			quantity,
-			portfolio.AvailableCash(),
-			portfolio.PositionSize("asset"))
+		if s.logger != nil {
+			s.logger.LogTrade(common.Trade{
+				Timestamp: data.Timestamp,
+				Price:     data.Close,
+				Quantity:  quantity,
+				Type:      common.ActionSell,
+			})
+		}
 	}
 }
 
 func (s *RSIStrategy) OnEnd(portfolio common.Portfolio) {
+	// 记录结束状态
+	if s.logger != nil {
+		s.logger.LogEnd(portfolio)
+	}
+
 	// 关闭所有仓位
 	if closer, ok := portfolio.(interface{ CloseAllPositions() }); ok {
 		closer.CloseAllPositions()

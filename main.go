@@ -17,6 +17,8 @@ import (
 	"stock/visualization"
 )
 
+// 使用common包中的ConsoleLogger
+
 func main() {
 	// 初始化数据源
 	ds := datasource.NewCSVDataSource("data/cmb.csv")
@@ -42,10 +44,11 @@ func main() {
 	initialCash := 100000.0
 
 	// 初始化broker
-	broker := broker.NewSimulatedBroker(feeConfig.Commission)
+	logger := common.NewConsoleLogger()
+	broker := broker.NewSimulatedBroker(feeConfig.Commission, logger)
 
 	// 初始化回测引擎
-	bt := backtest.NewBacktest(data, initialCash, feeConfig, broker)
+	bt := backtest.NewBacktest(data, initialCash, feeConfig, broker, logger, true)
 	for _, strategy := range strategies {
 		bt.AddStrategy(strategy)
 	}

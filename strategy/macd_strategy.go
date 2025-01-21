@@ -1,7 +1,6 @@
 package strategy
 
 import (
-	"log"
 	"stock/common"
 	"stock/indicators"
 )
@@ -110,23 +109,9 @@ func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio
 	if prevMACD < prevSignal && currentMACD > currentSignal {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 策略: %s | 买入 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
-			s.Name(),
-			data.Timestamp.Format("2006-01-02 15:04:05"),
-			data.Close,
-			quantity,
-			portfolio.AvailableCash(),
-			portfolio.PositionSize("asset"))
 	} else if prevMACD > prevSignal && currentMACD < currentSignal {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Sell(data.Timestamp, data.Close, quantity)
-		log.Printf("[交易日志] 策略: %s | 卖出 | 时间: %s | 价格: %.2f | 数量: %.2f | 可用资金: %.2f | 持仓: %.2f",
-			s.Name(),
-			data.Timestamp.Format("2006-01-02 15:04:05"),
-			data.Close,
-			quantity,
-			portfolio.AvailableCash(),
-			portfolio.PositionSize("asset"))
 	}
 }
 

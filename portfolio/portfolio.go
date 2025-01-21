@@ -70,14 +70,20 @@ func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) er
 		p.cash -= totalCost
 		p.positions["asset"] += quantity
 		p.positionSizes["asset"] += quantity
-		p.trades = append(p.trades, common.Trade{
+		trade := common.Trade{
 			Timestamp: timestamp,
 			Price:     price,
 			Quantity:  quantity,
 			Type:      common.ActionBuy,
 			Fee:       fee,
 			Strategy:  p.currentStrategy.Name(),
-		})
+		}
+		p.trades = append(p.trades, trade)
+
+		// Log trade if logger is configured
+		if p.broker.Logger() != nil {
+			p.broker.Logger().LogTrade(trade)
+		}
 	}
 	return nil
 }
@@ -99,14 +105,20 @@ func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) e
 	p.cash += totalProceeds
 	p.positions["asset"] -= quantity
 	p.positionSizes["asset"] -= quantity
-	p.trades = append(p.trades, common.Trade{
+	trade := common.Trade{
 		Timestamp: timestamp,
 		Price:     price,
 		Quantity:  quantity,
 		Type:      common.ActionSell,
 		Fee:       fee,
 		Strategy:  p.currentStrategy.Name(),
-	})
+	}
+	p.trades = append(p.trades, trade)
+
+	// Log trade if logger is configured
+	if p.broker.Logger() != nil {
+		p.broker.Logger().LogTrade(trade)
+	}
 	return nil
 }
 

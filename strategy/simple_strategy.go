@@ -1,7 +1,6 @@
 package strategy
 
 import (
-	"log"
 	"stock/common"
 	"time"
 )
@@ -12,42 +11,49 @@ type SimpleStrategy struct {
 	macdFast   int
 	macdSlow   int
 	macdSignal int
+	logger     common.Logger
 }
 
-func NewSimpleStrategy() *SimpleStrategy {
+func (s *SimpleStrategy) Name() string {
+	return "简单策略"
+}
+
+func NewSimpleStrategy(logger common.Logger) *SimpleStrategy {
 	return &SimpleStrategy{
 		bought:     false,
 		macdFast:   12, // 默认快速EMA周期
 		macdSlow:   26, // 默认慢速EMA周期
 		macdSignal: 9,  // 默认信号线周期
+		logger:     logger,
 	}
 }
 
 func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio) {
-	// 调试日志
+	// 记录数据
+	if s.logger != nil {
+		s.logger.LogData(data)
+	}
+
 	// 获取指标值
 	ma5, hasMA5 := data.Indicators["MA5"]
 	macd, hasMACD := data.Indicators["MACD"]
 	signal, hasSignal := data.Indicators["Signal"]
 	histogram, hasHistogram := data.Indicators["MACDHistogram"]
 
-	// 调试日志
-	log.Printf("[%s] Close: %.2f, MA5: %.2f, MACD: %.2f, Signal: %.2f, Bought: %v",
-		data.Timestamp.Format("2006-01-02"),
-		data.Close,
-		ma5,
-		macd,
-		signal,
-		s.bought)
-
 	if !s.bought && hasMA5 && hasMACD && hasSignal && hasHistogram {
 		// 买入条件：收盘价高于MA5的98%且MACD上穿信号线
 		if data.Close > ma5*0.98 && macd > signal && histogram > 0 {
-			log.Printf("Buy signal: Close (%.2f) > MA5 (%.2f), MACD (%.2f) > Signal (%.2f)",
-				data.Close, ma5, macd, signal)
 			portfolio.Buy(data.Timestamp, data.Close, 100)
 			s.bought = true
 			s.buyPrice = data.Close
+			if s.logger != nil {
+				s.logger.LogTrade(common.Trade{
+					Timestamp: data.Timestamp,
+					Price:     data.Close,
+					Quantity:  100,
+					Type:      common.ActionBuy,
+				})
+			}
 		}
 	} else if s.bought && hasMACD && hasSignal && hasHistogram {
 		// 调整止损/止盈条件
@@ -55,26 +61,52 @@ func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfol
 
 		// 止损条件：下跌5%时卖出
 		if currentReturn < -0.05 {
-			log.Printf("Stop loss triggered: %.2f%%", currentReturn*100)
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
+			if s.logger != nil {
+				s.logger.LogTrade(common.Trade{
+					Timestamp: data.Timestamp,
+					Price:     data.Close,
+					Quantity:  100,
+					Type:      common.ActionSell,
+				})
+			}
 		}
 		// 止盈条件：上涨10%时卖出
 		if currentReturn > 0.10 {
-			log.Printf("Take profit triggered: %.2f%%", currentReturn*100)
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
+			if s.logger != nil {
+				s.logger.LogTrade(common.Trade{
+					Timestamp: data.Timestamp,
+					Price:     data.Close,
+					Quantity:  100,
+					Type:      common.ActionSell,
+				})
+			}
 		}
 		// MACD下穿信号线时卖出
 		if macd < signal && histogram < 0 {
-			log.Printf("MACD cross down: MACD (%.2f) < Signal (%.2f)", macd, signal)
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
+			if s.logger != nil {
+				s.logger.LogTrade(common.Trade{
+					Timestamp: data.Timestamp,
+					Price:     data.Close,
+					Quantity:  100,
+					Type:      common.ActionSell,
+				})
+			}
 		}
 	}
 }
 
 func (s *SimpleStrategy) OnEnd(portfolio common.Portfolio) {
+	// 记录结束状态
+	if s.logger != nil {
+		s.logger.LogEnd(portfolio)
+	}
+
 	// Close any open positions
 	if s.bought {
 		portfolio.Sell(time.Now(), 0, 1)
