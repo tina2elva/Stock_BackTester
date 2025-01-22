@@ -110,60 +110,61 @@ func (s *MACDStrategy) OnStart(portfolio *portfolio.Portfolio) error {
 }
 
 // OnData handles new market data
-func (s *MACDStrategy) OnData(data *types.DataPoint, portfolio *portfolio.Portfolio) error {
-	// Process each data point
+func (s *MACDStrategy) OnData(data []*types.DataPoint, portfolio *portfolio.Portfolio) error {
+	// Process each stock's data point
+	for _, dp := range data {
+		// Add new data point to buffer
+		s.dataBuffer = append(s.dataBuffer, types.Bar{
+			Time:   dp.Timestamp.Unix(),
+			Open:   dp.Open,
+			High:   dp.High,
+			Low:    dp.Low,
+			Close:  dp.Close,
+			Volume: dp.Volume,
+		})
 
-	// Add new data point to buffer
-	s.dataBuffer = append(s.dataBuffer, types.Bar{
-		Time:   data.Timestamp.Unix(),
-		Open:   data.Open,
-		High:   data.High,
-		Low:    data.Low,
-		Close:  data.Close,
-		Volume: data.Volume,
-	})
+		// Need at least slowPeriod + signalPeriod bars to calculate MACD
+		if len(s.dataBuffer) < s.slowPeriod+s.signalPeriod {
+			continue
+		}
 
-	// Need at least slowPeriod + signalPeriod bars to calculate MACD
-	if len(s.dataBuffer) < s.slowPeriod+s.signalPeriod {
-		return nil
-	}
+		// Calculate MACD values
+		macdValues, err := indicators.MACD(s.dataBuffer, s.fastPeriod, s.slowPeriod, s.signalPeriod)
+		if err != nil {
+			return err
+		}
+		if len(macdValues) == 0 {
+			continue
+		}
 
-	// Calculate MACD values
-	macdValues, err := indicators.MACD(s.dataBuffer, s.fastPeriod, s.slowPeriod, s.signalPeriod)
-	if err != nil {
-		return err
-	}
-	if len(macdValues) == 0 {
-		return nil
-	}
+		// Use the last two MACD values to detect crossovers
+		if len(macdValues) < 2 {
+			continue
+		}
 
-	// Use the last two MACD values to detect crossovers
-	if len(macdValues) < 2 {
-		return nil
-	}
+		prevMACD := macdValues[len(macdValues)-2].MACD
+		prevSignal := macdValues[len(macdValues)-2].Signal
+		currentMACD := macdValues[len(macdValues)-1].MACD
+		currentSignal := macdValues[len(macdValues)-1].Signal
 
-	prevMACD := macdValues[len(macdValues)-2].MACD
-	prevSignal := macdValues[len(macdValues)-2].Signal
-	currentMACD := macdValues[len(macdValues)-1].MACD
-	currentSignal := macdValues[len(macdValues)-1].Signal
-
-	// Generate buy/sell signals based on MACD crossover
-	if len(s.dataBuffer) == 0 {
-		return nil
-	}
-	latestBar := s.dataBuffer[len(s.dataBuffer)-1]
-	if prevMACD < prevSignal && currentMACD > currentSignal {
-		quantity := 1.0 // default quantity
-		portfolio.Buy(time.Unix(latestBar.Time, 0), latestBar.Close, quantity)
-	} else if prevMACD > prevSignal && currentMACD < currentSignal {
-		quantity := 1.0 // 默认交易1单位
-		portfolio.Sell(time.Unix(latestBar.Time, 0), latestBar.Close, quantity)
+		// Generate buy/sell signals based on MACD crossover
+		if len(s.dataBuffer) == 0 {
+			continue
+		}
+		latestBar := s.dataBuffer[len(s.dataBuffer)-1]
+		if prevMACD < prevSignal && currentMACD > currentSignal {
+			quantity := 1.0 // default quantity
+			portfolio.Buy(dp.Symbol, time.Unix(latestBar.Time, 0), latestBar.Close, quantity)
+		} else if prevMACD > prevSignal && currentMACD < currentSignal {
+			quantity := 1.0 // 默认交易1单位
+			portfolio.Sell(dp.Symbol, time.Unix(latestBar.Time, 0), latestBar.Close, quantity)
+		}
 	}
 	return nil
 }
 
 // OnEnd handles backtest completion
-func (s *MACDStrategy) OnEnd(portfolio *portfolio.Portfolio) error {
+func (s *MACDStrategy) OnEnd(portfolio *portfolio.Portfolio, symbol string) error {
 	// Close all positions
 	if closer, ok := interface{}(portfolio).(interface{ CloseAllPositions() }); ok {
 		closer.CloseAllPositions()

@@ -57,7 +57,7 @@ func main() {
 	)
 
 	// 初始化回测引擎
-	bt := backtest.NewBacktest(startDate, endDate, initialCash, tdxDs, broker, logger)
+	bt := backtest.NewBacktest(startDate, endDate, initialCash, ds, broker, logger, []string{"600036.SH"})
 	for _, strategy := range strategies {
 		bt.AddStrategy(strategy)
 	}

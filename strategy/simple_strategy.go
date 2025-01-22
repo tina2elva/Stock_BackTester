@@ -43,7 +43,7 @@ func (s *SimpleStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio
 	if !s.bought && hasMA5 && hasMACD && hasSignal && hasHistogram {
 		// 买入条件：收盘价高于MA5的98%且MACD上穿信号线
 		if data.Close > ma5*0.98 && macd > signal && histogram > 0 {
-			portfolio.Buy(data.Timestamp, data.Close, 100)
+			portfolio.Buy(data.Symbol, data.Timestamp, data.Close, 100)
 			s.bought = true
 			s.buyPrice = data.Close
 			if s.logger != nil {
@@ -61,7 +61,7 @@ func (s *SimpleStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio
 
 		// 止损条件：下跌5%时卖出
 		if currentReturn < -0.05 {
-			portfolio.Sell(data.Timestamp, data.Close, 100)
+			portfolio.Sell(data.Symbol, data.Timestamp, data.Close, 100)
 			s.bought = false
 			if s.logger != nil {
 				s.logger.LogTrade(types.Trade{
@@ -74,7 +74,7 @@ func (s *SimpleStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio
 		}
 		// 止盈条件：上涨10%时卖出
 		if currentReturn > 0.10 {
-			portfolio.Sell(data.Timestamp, data.Close, 100)
+			portfolio.Sell(data.Symbol, data.Timestamp, data.Close, 100)
 			s.bought = false
 			if s.logger != nil {
 				s.logger.LogTrade(types.Trade{
@@ -87,7 +87,7 @@ func (s *SimpleStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio
 		}
 		// MACD下穿信号线时卖出
 		if macd < signal && histogram < 0 {
-			portfolio.Sell(data.Timestamp, data.Close, 100)
+			portfolio.Sell(data.Symbol, data.Timestamp, data.Close, 100)
 			s.bought = false
 			if s.logger != nil {
 				s.logger.LogTrade(types.Trade{
@@ -101,7 +101,7 @@ func (s *SimpleStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio
 	}
 }
 
-func (s *SimpleStrategy) OnEnd(portfolio types.Portfolio) {
+func (s *SimpleStrategy) OnEnd(portfolio types.Portfolio, symbol string) {
 	// 记录结束状态
 	if s.logger != nil {
 		s.logger.LogEnd(portfolio)
@@ -109,6 +109,6 @@ func (s *SimpleStrategy) OnEnd(portfolio types.Portfolio) {
 
 	// Close any open positions
 	if s.bought {
-		portfolio.Sell(time.Now(), 0, 1)
+		portfolio.Sell(symbol, time.Now(), 0, 1)
 	}
 }

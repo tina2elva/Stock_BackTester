@@ -31,6 +31,7 @@ func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]type
 			Title: "交易量",
 			Left:  "center",
 		}),
+
 		charts.WithXAxisOpts(opts.XAxis{
 			Name: "日期",
 			Type: "category",
@@ -203,6 +204,11 @@ func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]type
 			Title: c.title,
 			Left:  "center",
 		}),
+		charts.WithTooltipOpts(opts.Tooltip{
+			Show:      true,
+			Trigger:   "axis",
+			TriggerOn: "mousemove|click",
+		}),
 		charts.WithXAxisOpts(opts.XAxis{
 			Name: "日期",
 			Type: "category",
@@ -217,20 +223,20 @@ func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]type
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
 			Type:       "inside",
-			Start:      50,
+			Start:      0,
 			End:        100,
 			XAxisIndex: []int{0, 1},
 			YAxisIndex: []int{0},
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
 			Type:       "slider",
-			Start:      50,
+			Start:      0,
 			End:        100,
 			XAxisIndex: []int{0, 1},
 			YAxisIndex: []int{0},
 		}),
 		charts.WithXAxisOpts(opts.XAxis{
-			SplitNumber: 20,
+			SplitNumber: 7,
 		}),
 		charts.WithInitializationOpts(opts.Initialization{
 			Width:  "100%",

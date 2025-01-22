@@ -1,6 +1,7 @@
 package backtest
 
 import (
+	"sort"
 	"stock/broker"
 	"stock/common/types"
 	"stock/datasource"
@@ -19,6 +20,7 @@ type Backtest struct {
 	portfolios  []*portfolio.Portfolio
 	broker      broker.Broker
 	logger      types.Logger
+	symbols     []string
 }
 
 type BacktestResult struct {
@@ -37,7 +39,7 @@ type StrategyResult struct {
 	MaxDrawdown float64
 }
 
-func NewBacktest(startDate time.Time, endDate time.Time, initialCash float64, dataSource datasource.DataSource, broker broker.Broker, logger types.Logger) *Backtest {
+func NewBacktest(startDate time.Time, endDate time.Time, initialCash float64, dataSource datasource.DataSource, broker broker.Broker, logger types.Logger, symbols []string) *Backtest {
 	return &Backtest{
 		startDate:   startDate,
 		endDate:     endDate,
@@ -45,6 +47,7 @@ func NewBacktest(startDate time.Time, endDate time.Time, initialCash float64, da
 		dataSource:  dataSource,
 		broker:      broker,
 		logger:      logger,
+		symbols:     symbols,
 	}
 }
 
@@ -70,14 +73,35 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 	// Main backtest loop
 	equityCurves := make([][]float64, len(b.strategies))
 
-	data, err := b.dataSource.GetData("", datasource.PeriodTypeDay, b.startDate, b.endDate)
-	if err != nil {
-		return nil, err
+	// Get data for all symbols
+	allData := make([]*types.DataPoint, 0)
+	for _, symbol := range b.symbols {
+		data, err := b.dataSource.GetData(symbol, datasource.PeriodTypeDay, b.startDate, b.endDate)
+		if err != nil {
+			return nil, err
+		}
+		allData = append(allData, data...)
 	}
 
 	for index, strategy := range b.strategies {
-		for _, d := range data {
-			err := strategy.OnData(d, b.portfolios[index])
+		// Group data points by timestamp
+		dataByTimestamp := make(map[time.Time][]*types.DataPoint)
+		for _, d := range allData {
+			dataByTimestamp[d.Timestamp] = append(dataByTimestamp[d.Timestamp], d)
+		}
+
+		// Sort timestamps and process data points in order
+		sortedTimestamps := make([]time.Time, 0, len(dataByTimestamp))
+		for timestamp := range dataByTimestamp {
+			sortedTimestamps = append(sortedTimestamps, timestamp)
+		}
+		sort.Slice(sortedTimestamps, func(i, j int) bool {
+			return sortedTimestamps[i].Before(sortedTimestamps[j])
+		})
+
+		for _, timestamp := range sortedTimestamps {
+			dataPoints := dataByTimestamp[timestamp]
+			err := strategy.OnData(dataPoints, b.portfolios[index])
 			if err != nil {
 				return nil, err
 			}
@@ -89,7 +113,7 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 	// Finalize strategies
 	for index, strategy := range b.strategies {
 		b.logger.LogEnd(b.portfolios[index])
-		err := strategy.OnEnd(b.portfolios[index])
+		err := strategy.OnEnd(b.portfolios[index], b.symbols[0])
 		if err != nil {
 			return nil, err
 		}
@@ -137,21 +161,23 @@ func calculateMaxDrawdown(equityCurve []float64) float64 {
 	return maxDrawdown
 }
 
-func (b *Backtest) AnalyzeTrades() (float64, float64, float64) {
-	var totalProfit float64
-	var totalLoss float64
-	var totalTrades int
+func (b *Backtest) AnalyzeTrades() map[string]types.TradeAnalysis {
+	analysis := make(map[string]types.TradeAnalysis)
 
 	for _, portfolio := range b.portfolios {
 		for _, trade := range portfolio.Transactions() {
-			totalTrades++
+			symbolAnalysis := analysis[trade.Symbol]
+			symbolAnalysis.TotalTrades++
+
 			if trade.Type == types.ActionBuy {
-				totalProfit += trade.Price * trade.Quantity
+				symbolAnalysis.TotalBuy += trade.Price * trade.Quantity
 			} else if trade.Type == types.ActionSell {
-				totalLoss += trade.Price * trade.Quantity
+				symbolAnalysis.TotalSell += trade.Price * trade.Quantity
 			}
+
+			analysis[trade.Symbol] = symbolAnalysis
 		}
 	}
 
-	return totalProfit, totalLoss, float64(totalTrades)
+	return analysis
 }

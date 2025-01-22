@@ -3,23 +3,27 @@ package strategy
 import (
 	"stock/common/types"
 	"stock/indicators"
+	"stock/portfolio"
+	"time"
 )
 
 type RSIStrategy struct {
-	period     int
-	overbought float64
-	oversold   float64
-	dataBuffer []types.Bar
-	logger     types.Logger
+	period      int
+	overbought  float64
+	oversold    float64
+	dataBuffer  map[string][]types.Bar         // 按symbol存储数据
+	multiPeriod map[int]map[string][]types.Bar // 多周期数据
+	logger      types.Logger
 }
 
 func NewRSIStrategy(period int, overbought, oversold float64, logger types.Logger) *RSIStrategy {
-	// 优化RSI参数
 	return &RSIStrategy{
-		period:     9,  // 缩短周期以提高灵敏度
-		overbought: 65, // 降低超买阈值
-		oversold:   35, // 提高超卖阈值
-		logger:     logger,
+		period:      period,
+		overbought:  overbought,
+		oversold:    oversold,
+		dataBuffer:  make(map[string][]types.Bar),
+		multiPeriod: make(map[int]map[string][]types.Bar),
+		logger:      logger,
 	}
 }
 
@@ -45,20 +49,20 @@ func (s *RSIStrategy) Run(data []types.Bar) []types.Signal {
 	for i := start; i < len(data); i++ {
 		rsi := rsiValues[i]
 
-		// 生成交易信号，增加过滤条件
-		if rsi < s.oversold && rsi > 30 { // 在超卖区域但不过度
+		// 生成交易信号
+		if rsi < s.oversold {
 			signals[i] = types.Signal{
 				Action: types.ActionBuy,
 				Price:  data[i].Close,
 				Time:   data[i].Time,
-				Qty:    2, // 增加交易单位
+				Qty:    1,
 			}
-		} else if rsi > s.overbought && rsi < 70 { // 在超买区域但不过度
+		} else if rsi > s.overbought {
 			signals[i] = types.Signal{
 				Action: types.ActionSell,
 				Price:  data[i].Close,
 				Time:   data[i].Time,
-				Qty:    2, // 增加交易单位
+				Qty:    1,
 			}
 		}
 	}
@@ -66,78 +70,66 @@ func (s *RSIStrategy) Run(data []types.Bar) []types.Signal {
 	return signals
 }
 
-func (s *RSIStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio) {
-	// 记录数据
-	if s.logger != nil {
-		s.logger.LogData(data)
-	}
-
-	// 添加新数据点到缓冲区
-	s.dataBuffer = append(s.dataBuffer, types.Bar{
-		Time:   data.Timestamp.Unix(),
-		Open:   data.Open,
-		High:   data.High,
-		Low:    data.Low,
-		Close:  data.Close,
-		Volume: data.Volume,
-	})
-
-	// 需要至少period+1个bar来计算RSI
-	if len(s.dataBuffer) < s.period+1 {
-		return
-	}
-
-	// 计算RSI值
-	rsiValues, err := indicators.RSI(s.dataBuffer, s.period)
-	if err != nil {
-		return
-	}
-	if len(rsiValues) == 0 {
-		return
-	}
-
-	// 使用最新的RSI值
-	currentRSI := rsiValues[len(rsiValues)-1]
-
-	// 生成交易信号
-	if currentRSI < s.oversold {
-		quantity := 1.0 // 默认交易1单位
-		portfolio.Buy(data.Timestamp, data.Close, quantity)
-		if s.logger != nil {
-			s.logger.LogTrade(types.Trade{
-				Timestamp: data.Timestamp,
-				Price:     data.Close,
-				Quantity:  quantity,
-				Type:      types.ActionBuy,
-			})
-		}
-	} else if currentRSI > s.overbought {
-		quantity := 1.0 // 默认交易1单位
-		portfolio.Sell(data.Timestamp, data.Close, quantity)
-		if s.logger != nil {
-			s.logger.LogTrade(types.Trade{
-				Timestamp: data.Timestamp,
-				Price:     data.Close,
-				Quantity:  quantity,
-				Type:      types.ActionSell,
-			})
-		}
-	}
+func (s *RSIStrategy) OnStart(portfolio *portfolio.Portfolio) error {
+	s.dataBuffer = make(map[string][]types.Bar)
+	return nil
 }
 
-func (s *RSIStrategy) OnEnd(portfolio types.Portfolio) {
-	// 记录结束状态
-	if s.logger != nil {
-		s.logger.LogEnd(portfolio)
-	}
+func (s *RSIStrategy) OnData(data []*types.DataPoint, portfolio *portfolio.Portfolio) error {
+	// 处理每个股票的数据点
+	for _, dp := range data {
+		// 初始化symbol的数据缓冲区
+		if _, exists := s.dataBuffer[dp.Symbol]; !exists {
+			s.dataBuffer[dp.Symbol] = make([]types.Bar, 0)
+		}
 
+		// 添加新数据点到缓冲区
+		s.dataBuffer[dp.Symbol] = append(s.dataBuffer[dp.Symbol], types.Bar{
+			Time:   dp.Timestamp.Unix(),
+			Open:   dp.Open,
+			High:   dp.High,
+			Low:    dp.Low,
+			Close:  dp.Close,
+			Volume: dp.Volume,
+		})
+
+		// 需要至少period+1个bar来计算RSI
+		if len(s.dataBuffer[dp.Symbol]) < s.period+1 {
+			continue
+		}
+
+		// 计算RSI值
+		rsiValues, err := indicators.RSI(s.dataBuffer[dp.Symbol], s.period)
+		if err != nil {
+			return err
+		}
+		if len(rsiValues) == 0 {
+			continue
+		}
+
+		// 使用最新的RSI值
+		currentRSI := rsiValues[len(rsiValues)-1]
+
+		// 生成交易信号
+		if currentRSI < s.oversold {
+			quantity := 1.0
+			portfolio.Buy(dp.Symbol, time.Unix(s.dataBuffer[dp.Symbol][len(s.dataBuffer[dp.Symbol])-1].Time, 0), dp.Close, quantity)
+		} else if currentRSI > s.overbought {
+			quantity := 1.0
+			portfolio.Sell(dp.Symbol, time.Unix(s.dataBuffer[dp.Symbol][len(s.dataBuffer[dp.Symbol])-1].Time, 0), dp.Close, quantity)
+		}
+	}
+	return nil
+}
+
+func (s *RSIStrategy) OnEnd(portfolio *portfolio.Portfolio, symbol string) error {
 	// 关闭所有仓位
-	if closer, ok := portfolio.(interface{ CloseAllPositions() }); ok {
+	if closer, ok := interface{}(portfolio).(interface{ CloseAllPositions() }); ok {
 		closer.CloseAllPositions()
 	}
+	return nil
 }
 
-// Calculate returns RSI indicator values
 func (s *RSIStrategy) Calculate(candles []types.Candle) map[string][]float64 {
 	// Convert candles to bars
 	bars := make([]types.Bar, len(candles))

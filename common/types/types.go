@@ -155,6 +155,7 @@ type Candle struct {
 
 // DataPoint 数据点
 type DataPoint struct {
+	Symbol     string
 	Timestamp  time.Time
 	Open       float64
 	High       float64
@@ -191,11 +192,25 @@ type RSIValue struct {
 	Slow   float64
 }
 
+// TradeAnalysis 交易分析
+type TradeAnalysis struct {
+	TotalTrades int
+	TotalBuy    float64
+	TotalSell   float64
+}
+
 // Logger 日志接口
 type Logger interface {
 	LogData(data *DataPoint)
 	LogTrade(trade Trade)
 	LogEnd(portfolio Portfolio)
+}
+
+// Strategy 策略接口
+type Strategy interface {
+	OnStart(portfolio Portfolio) error
+	OnData(data []*DataPoint, portfolio Portfolio) error
+	OnEnd(portfolio Portfolio, symbol string) error
 }
 
 // FeeConfig 费用配置
@@ -223,8 +238,8 @@ type Portfolio interface {
 	Transactions() []Trade
 	GetPositions() map[string]float64
 	GetTrades() []Trade
-	Buy(timestamp time.Time, price float64, quantity float64) error
-	Sell(timestamp time.Time, price float64, quantity float64) error
+	Buy(symbol string, timestamp time.Time, price float64, quantity float64) error
+	Sell(symbol string, timestamp time.Time, price float64, quantity float64) error
 }
 
 // Signal 交易信号
