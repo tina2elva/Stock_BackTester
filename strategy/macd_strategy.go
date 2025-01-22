@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"fmt"
 	"math"
 	"stock/common/types"
 	"stock/indicators"
@@ -9,19 +10,22 @@ import (
 )
 
 type MACDStrategy struct {
-	fastPeriod   int
-	slowPeriod   int
-	signalPeriod int
-	prevMACD     float64
-	prevSignal   float64
-	dataBuffer   []types.Bar
+	Periods         []int
+	fastPeriod      int
+	slowPeriod      int
+	signalPeriod    int
+	prevMACD        float64
+	prevSignal      float64
+	dataBuffer      []types.Bar
+	multiPeriodData map[int][]types.Bar // 存储不同周期的数据
 }
 
-func NewMACDStrategy(fast, slow, signal int) *MACDStrategy {
+func NewMACDStrategy(fast, slow, signal int, periods []int) *MACDStrategy {
 	return &MACDStrategy{
 		fastPeriod:   fast,
 		slowPeriod:   slow,
 		signalPeriod: signal,
+		Periods:      periods,
 		dataBuffer:   make([]types.Bar, 0),
 		prevMACD:     math.NaN(),
 		prevSignal:   math.NaN(),
@@ -182,23 +186,117 @@ func (s *MACDStrategy) Calculate(candles []types.Candle) map[string][]float64 {
 		}
 	}
 
-	// Calculate MACD values
-	macdValues, err := indicators.MACD(bars, s.fastPeriod, s.slowPeriod, s.signalPeriod)
-	if err != nil {
-		return nil
-	}
-
-	// Prepare result
+	// Initialize result map
 	result := make(map[string][]float64)
 	result["MACD"] = make([]float64, len(candles))
 	result["Signal"] = make([]float64, len(candles))
 	result["Histogram"] = make([]float64, len(candles))
 
-	// Fill result arrays
+	// Calculate base MACD values
+	macdValues, err := indicators.MACD(bars, s.fastPeriod, s.slowPeriod, s.signalPeriod)
+	if err != nil {
+		return nil
+	}
+
+	// Fill base MACD values
 	for i, v := range macdValues {
 		result["MACD"][i] = v.MACD
 		result["Signal"][i] = v.Signal
 		result["Histogram"][i] = v.Histogram
+	}
+
+	// Calculate multi-period MACD values
+	for _, period := range s.Periods {
+		if period <= 0 {
+			continue
+		}
+
+		// Resample data to target period
+		resampledBars := s.resampleBars(bars, period)
+		if len(resampledBars) == 0 {
+			continue
+		}
+
+		// Calculate MACD for resampled data
+		resampledMACD, err := indicators.MACD(resampledBars, s.fastPeriod, s.slowPeriod, s.signalPeriod)
+		if err != nil {
+			continue
+		}
+
+		// Map resampled MACD values back to original timeframe
+		mappedMACD := s.mapResampledValues(resampledMACD, len(bars), period)
+
+		// Add to result with period suffix
+		result[fmt.Sprintf("MACD_%d", period)] = mappedMACD["MACD"]
+		result[fmt.Sprintf("Signal_%d", period)] = mappedMACD["Signal"]
+		result[fmt.Sprintf("Histogram_%d", period)] = mappedMACD["Histogram"]
+	}
+
+	return result
+}
+
+// resampleBars resamples bars to target period
+func (s *MACDStrategy) resampleBars(bars []types.Bar, period int) []types.Bar {
+	if len(bars) == 0 || period <= 0 {
+		return nil
+	}
+
+	resampled := make([]types.Bar, 0)
+	currentBar := types.Bar{
+		Time:   bars[0].Time,
+		Open:   bars[0].Open,
+		High:   bars[0].High,
+		Low:    bars[0].Low,
+		Close:  bars[0].Close,
+		Volume: bars[0].Volume,
+	}
+
+	for i := 1; i < len(bars); i++ {
+		if i%period == 0 {
+			resampled = append(resampled, currentBar)
+			currentBar = types.Bar{
+				Time:   bars[i].Time,
+				Open:   bars[i].Open,
+				High:   bars[i].High,
+				Low:    bars[i].Low,
+				Close:  bars[i].Close,
+				Volume: bars[i].Volume,
+			}
+		} else {
+			currentBar.High = math.Max(currentBar.High, bars[i].High)
+			currentBar.Low = math.Min(currentBar.Low, bars[i].Low)
+			currentBar.Close = bars[i].Close
+			currentBar.Volume += bars[i].Volume
+		}
+	}
+
+	// Add last bar
+	if len(resampled) == 0 || resampled[len(resampled)-1].Time != currentBar.Time {
+		resampled = append(resampled, currentBar)
+	}
+
+	return resampled
+}
+
+// mapResampledValues maps resampled indicator values back to original timeframe
+func (s *MACDStrategy) mapResampledValues(resampledMACD []types.MACDValue, originalLength, period int) map[string][]float64 {
+	result := make(map[string][]float64)
+	result["MACD"] = make([]float64, originalLength)
+	result["Signal"] = make([]float64, originalLength)
+	result["Histogram"] = make([]float64, originalLength)
+
+	resampledIndex := 0
+	for i := 0; i < originalLength; i++ {
+		if i > 0 && i%period == 0 {
+			resampledIndex++
+		}
+		if resampledIndex >= len(resampledMACD) {
+			continue
+		}
+
+		result["MACD"][i] = resampledMACD[resampledIndex].MACD
+		result["Signal"][i] = resampledMACD[resampledIndex].Signal
+		result["Histogram"][i] = resampledMACD[resampledIndex].Histogram
 	}
 
 	return result

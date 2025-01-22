@@ -6,6 +6,13 @@ import (
 	"stock/common/types"
 )
 
+// MACDValue represents MACD indicator values
+type MACDValue struct {
+	MACD      float64
+	Signal    float64
+	Histogram float64
+}
+
 // MACD calculates Moving Average Convergence Divergence
 func MACD(bars []types.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]types.MACDValue, error) {
 	if len(bars) < slowPeriod {
@@ -57,6 +64,21 @@ func MACD(bars []types.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]types.M
 	}
 
 	return result, nil
+}
+
+// MultiPeriodMACD calculates MACD for multiple timeframes
+func MultiPeriodMACD(bars []types.Bar, periods []int) (map[int][]types.MACDValue, error) {
+	results := make(map[int][]types.MACDValue)
+
+	for _, period := range periods {
+		macd, err := MACD(bars, period, period*2, period/2)
+		if err != nil {
+			return nil, err
+		}
+		results[period] = macd
+	}
+
+	return results, nil
 }
 
 // EMA calculates Exponential Moving Average

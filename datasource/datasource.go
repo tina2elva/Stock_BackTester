@@ -2,6 +2,8 @@ package datasource
 
 import (
 	"encoding/csv"
+	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -9,9 +11,27 @@ import (
 	"stock/common/types"
 )
 
+// PeriodType 周期类型
+type PeriodType int
+
+const (
+	PeriodTypeMinute PeriodType = iota
+	PeriodTypeHour
+	PeriodTypeDay
+	PeriodTypeWeek
+	PeriodTypeMonth
+)
+
 // DataSource 数据源接口
 type DataSource interface {
-	GetData(symbol string, start, end time.Time) ([]*types.DataPoint, error)
+	// 获取指定周期的数据
+	GetData(symbol string, period PeriodType, start, end time.Time) ([]*types.DataPoint, error)
+
+	// 获取支持的所有周期
+	GetSupportedPeriods() []PeriodType
+
+	// 将数据转换为指定周期
+	ConvertPeriod(data []*types.DataPoint, targetPeriod PeriodType) ([]*types.DataPoint, error)
 }
 
 // CSVDataSource CSV文件数据源
@@ -23,7 +43,7 @@ func NewCSVDataSource(path string) *CSVDataSource {
 	return &CSVDataSource{path: path}
 }
 
-func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*types.DataPoint, error) {
+func (ds *CSVDataSource) GetData(symbol string, period PeriodType, start, end time.Time) ([]*types.DataPoint, error) {
 	file, err := os.Open(ds.path)
 	if err != nil {
 		return nil, err
@@ -79,4 +99,60 @@ func calculateMA(prices []float64, period int) float64 {
 		sum += prices[i]
 	}
 	return sum / float64(period)
+}
+
+func (ds *CSVDataSource) GetSupportedPeriods() []PeriodType {
+	return []PeriodType{PeriodTypeDay}
+}
+
+func (ds *CSVDataSource) ConvertPeriod(data []*types.DataPoint, targetPeriod PeriodType) ([]*types.DataPoint, error) {
+	if targetPeriod == PeriodTypeDay {
+		return data, nil
+	}
+
+	// 按周转换
+	if targetPeriod == PeriodTypeWeek {
+		return convertToWeekly(data)
+	}
+
+	return nil, fmt.Errorf("unsupported period conversion: %v", targetPeriod)
+}
+
+func convertToWeekly(data []*types.DataPoint) ([]*types.DataPoint, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var weeklyData []*types.DataPoint
+	var currentWeek *types.DataPoint
+
+	for _, dp := range data {
+		year, week := dp.Timestamp.ISOWeek()
+		currentYear, currentWeekNum := currentWeek.Timestamp.ISOWeek()
+		if currentWeek == nil || currentYear != year || currentWeekNum != week {
+			if currentWeek != nil {
+				weeklyData = append(weeklyData, currentWeek)
+			}
+			currentWeek = &types.DataPoint{
+				Timestamp:  dp.Timestamp,
+				Open:       dp.Open,
+				High:       dp.High,
+				Low:        dp.Low,
+				Close:      dp.Close,
+				Volume:     dp.Volume,
+				Indicators: make(map[string]float64),
+			}
+		} else {
+			currentWeek.High = math.Max(currentWeek.High, dp.High)
+			currentWeek.Low = math.Min(currentWeek.Low, dp.Low)
+			currentWeek.Close = dp.Close
+			currentWeek.Volume += dp.Volume
+		}
+	}
+
+	if currentWeek != nil {
+		weeklyData = append(weeklyData, currentWeek)
+	}
+
+	return weeklyData, nil
 }

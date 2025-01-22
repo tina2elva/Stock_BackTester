@@ -69,7 +69,7 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 	// Main backtest loop
 	equityCurves := make([][]float64, len(b.strategies))
 
-	data, err := b.dataSource.GetData("", b.startDate, b.endDate)
+	data, err := b.dataSource.GetData("", datasource.PeriodTypeDay, b.startDate, b.endDate)
 	if err != nil {
 		return nil, err
 	}

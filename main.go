@@ -24,14 +24,14 @@ func main() {
 	// 获取招商银行2020-2022年历史数据
 	startDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC)
-	data, err := ds.GetData("600036.SH", startDate, endDate)
+	data, err := ds.GetData("600036.SH", datasource.PeriodTypeDay, startDate, endDate)
 	if err != nil {
 		log.Fatalf("获取数据失败: %v", err)
 	}
 
 	// 初始化多个策略
 	strategies := []strategy.Strategy{
-		strategy.NewMACDStrategy(12, 26, 9),
+		strategy.NewMACDStrategy(12, 26, 9, []int{5, 10, 20}),
 	}
 
 	// 初始化费用配置
