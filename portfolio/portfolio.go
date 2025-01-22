@@ -57,32 +57,35 @@ func (p *Portfolio) Transactions() []common.Trade {
 }
 
 func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) error {
-	err := p.broker.Buy(timestamp, price, quantity)
+	order, err := p.broker.CreateOrder(common.ActionBuy, price, quantity)
 	if err != nil {
 		return err
 	}
 
-	cost := price * quantity
-	fee := p.broker.CalculateTradeCost(common.ActionBuy, price, quantity)
-	totalCost := cost + fee
+	if order.Status == broker.OrderFilled {
+		cost := price * quantity
+		fee := p.broker.CalculateTradeCost(common.ActionBuy, price, quantity)
+		totalCost := cost + fee
 
-	if p.cash >= totalCost {
-		p.cash -= totalCost
-		p.positions["asset"] += quantity
-		p.positionSizes["asset"] += quantity
-		trade := common.Trade{
-			Timestamp: timestamp,
-			Price:     price,
-			Quantity:  quantity,
-			Type:      common.ActionBuy,
-			Fee:       fee,
-			Strategy:  p.currentStrategy.Name(),
-		}
-		p.trades = append(p.trades, trade)
+		if p.cash >= totalCost {
+			p.cash -= totalCost
+			p.positions["asset"] += quantity
+			p.positionSizes["asset"] += quantity
+			trade := common.Trade{
+				Timestamp: timestamp,
+				Price:     price,
+				Quantity:  quantity,
+				Type:      common.ActionBuy,
+				Fee:       fee,
+				Strategy:  p.currentStrategy.Name(),
+				OrderID:   order.ID,
+			}
+			p.trades = append(p.trades, trade)
 
-		// Log trade if logger is configured
-		if p.broker.Logger() != nil {
-			p.broker.Logger().LogTrade(trade)
+			// Log trade if logger is configured
+			if p.broker.Logger() != nil {
+				p.broker.Logger().LogTrade(trade)
+			}
 		}
 	}
 	return nil
@@ -93,31 +96,34 @@ func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) e
 		return common.ErrInsufficientPosition
 	}
 
-	err := p.broker.Sell(timestamp, price, quantity)
+	order, err := p.broker.CreateOrder(common.ActionSell, price, quantity)
 	if err != nil {
 		return err
 	}
 
-	proceeds := price * quantity
-	fee := p.broker.CalculateTradeCost(common.ActionSell, price, quantity)
-	totalProceeds := proceeds - fee
+	if order.Status == broker.OrderFilled {
+		proceeds := price * quantity
+		fee := p.broker.CalculateTradeCost(common.ActionSell, price, quantity)
+		totalProceeds := proceeds - fee
 
-	p.cash += totalProceeds
-	p.positions["asset"] -= quantity
-	p.positionSizes["asset"] -= quantity
-	trade := common.Trade{
-		Timestamp: timestamp,
-		Price:     price,
-		Quantity:  quantity,
-		Type:      common.ActionSell,
-		Fee:       fee,
-		Strategy:  p.currentStrategy.Name(),
-	}
-	p.trades = append(p.trades, trade)
+		p.cash += totalProceeds
+		p.positions["asset"] -= quantity
+		p.positionSizes["asset"] -= quantity
+		trade := common.Trade{
+			Timestamp: timestamp,
+			Price:     price,
+			Quantity:  quantity,
+			Type:      common.ActionSell,
+			Fee:       fee,
+			Strategy:  p.currentStrategy.Name(),
+			OrderID:   order.ID,
+		}
+		p.trades = append(p.trades, trade)
 
-	// Log trade if logger is configured
-	if p.broker.Logger() != nil {
-		p.broker.Logger().LogTrade(trade)
+		// Log trade if logger is configured
+		if p.broker.Logger() != nil {
+			p.broker.Logger().LogTrade(trade)
+		}
 	}
 	return nil
 }

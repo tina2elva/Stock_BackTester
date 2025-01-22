@@ -34,6 +34,15 @@ type DataPoint struct {
 	Indicators map[string]float64
 }
 
+type OrderStatus int
+
+const (
+	OrderPending OrderStatus = iota
+	OrderFilled
+	OrderCancelled
+	OrderRejected
+)
+
 type Trade struct {
 	ID        string
 	Timestamp time.Time
@@ -42,6 +51,7 @@ type Trade struct {
 	Type      Action
 	Fee       float64
 	Strategy  string
+	OrderID   string
 }
 
 type Action int
