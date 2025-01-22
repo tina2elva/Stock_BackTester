@@ -7,6 +7,16 @@ import (
 	"stock/common/types"
 )
 
+// Observer 观测器接口
+type Observer interface {
+	OnOrder(order *types.Order)
+	OnTrade(trade *types.Trade)
+	GetTrades() []*types.Trade
+	GetOrders() []*types.Order
+	Clear()
+}
+
+// Broker 定义经纪人接口
 type Broker interface {
 	// 创建新订单
 	CreateOrder(strategyID string, symbol string, quantity float64, orderType types.OrderType) (*types.Order, error)
@@ -30,6 +40,8 @@ type Broker interface {
 	GetPositions() (map[string]*types.Position, error)
 	// 更新仓位
 	UpdatePosition(symbol string, price float64, quantity float64, action types.Action) error
+	// 获取观测器
+	GetObserver() Observer
 }
 
 type SimulatedBroker struct {
@@ -38,6 +50,7 @@ type SimulatedBroker struct {
 	account   *types.Account
 	orders    map[string]*types.Order
 	positions map[string]*types.Position
+	observer  Observer
 }
 
 func NewSimulatedBroker(feeRate float64, logger types.Logger, initialCash float64) *SimulatedBroker {
@@ -52,7 +65,12 @@ func NewSimulatedBroker(feeRate float64, logger types.Logger, initialCash float6
 		},
 		orders:    make(map[string]*types.Order),
 		positions: make(map[string]*types.Position),
+		observer:  NewDefaultObserver(),
 	}
+}
+
+func (b *SimulatedBroker) GetObserver() Observer {
+	return b.observer
 }
 
 func (b *SimulatedBroker) GetPosition(symbol string) (*types.Position, error) {
@@ -101,6 +119,7 @@ func (b *SimulatedBroker) CreateOrder(strategyID string, symbol string, quantity
 	}
 
 	b.orders[order.ID] = order
+	b.observer.OnOrder(order)
 	return order, nil
 }
 
@@ -138,6 +157,16 @@ func (b *SimulatedBroker) ExecuteOrder(order *types.Order) error {
 	// 更新订单状态
 	order.Status = types.OrderStatusFilled
 	order.UpdatedAt = time.Now()
+
+	// 通知观测器交易完成
+	b.observer.OnTrade(&types.Trade{
+		OrderID:   order.ID,
+		Symbol:    order.Symbol,
+		Price:     order.Price,
+		Quantity:  order.Quantity,
+		Timestamp: time.Now(),
+	})
+
 	return nil
 }
 

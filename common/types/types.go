@@ -174,6 +174,7 @@ type Trade struct {
 	Fee       float64
 	Strategy  string
 	OrderID   string
+	Symbol    string
 }
 
 // MACDValue MACD指标值
