@@ -63,10 +63,9 @@ func main() {
 	}
 
 	// 运行回测
-	bt.Run()
+	results, _ := bt.Run()
 
 	// 获取回测结果
-	results := bt.Results()
 	if len(results.Results) == 0 {
 		log.Fatal("没有回测结果")
 	}
@@ -85,7 +84,7 @@ func main() {
 		duration := endDate.Sub(startDate)
 		totalReturn := analyzer.TotalReturn(finalValue)
 		annualizedReturn := analyzer.AnnualizedReturn(finalValue, duration)
-		maxDrawdown := analyzer.MaxDrawdown(result.EquityCurve)
+		maxDrawdown := result.MaxDrawdown
 		winRate := analyzer.WinRate()
 		avgProfit, avgLoss := analyzer.AverageProfitLoss()
 		profitLossRatio := analyzer.ProfitLossRatio()

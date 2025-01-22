@@ -34,6 +34,7 @@ type StrategyResult struct {
 	FinalValue  float64
 	Trades      []types.Trade
 	EquityCurve []float64
+	MaxDrawdown float64
 }
 
 func NewBacktest(startDate time.Time, endDate time.Time, initialCash float64, dataSource datasource.DataSource, broker broker.Broker, logger types.Logger) *Backtest {
@@ -103,6 +104,7 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 			FinalValue:  b.portfolios[i].GetValue(),
 			Trades:      b.portfolios[i].Transactions(),
 			EquityCurve: equityCurves[i],
+			MaxDrawdown: calculateMaxDrawdown(equityCurves[i]),
 		}
 	}
 
@@ -112,6 +114,27 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 		InitialCash: b.initialCash,
 		Results:     results,
 	}, nil
+}
+
+func calculateMaxDrawdown(equityCurve []float64) float64 {
+	if len(equityCurve) == 0 {
+		return 0
+	}
+
+	peak := equityCurve[0]
+	maxDrawdown := 0.0
+
+	for _, value := range equityCurve {
+		if value > peak {
+			peak = value
+		}
+		drawdown := (peak - value) / peak
+		if drawdown > maxDrawdown {
+			maxDrawdown = drawdown
+		}
+	}
+
+	return maxDrawdown
 }
 
 func (b *Backtest) AnalyzeTrades() (float64, float64, float64) {
@@ -131,24 +154,4 @@ func (b *Backtest) AnalyzeTrades() (float64, float64, float64) {
 	}
 
 	return totalProfit, totalLoss, float64(totalTrades)
-}
-
-func (b *Backtest) Results() *BacktestResult {
-	results := make([]StrategyResult, len(b.strategies))
-	for i := range b.strategies {
-		results[i] = StrategyResult{
-			Strategy:    b.strategies[i],
-			Portfolio:   b.portfolios[i],
-			FinalValue:  b.portfolios[i].GetValue(),
-			Trades:      b.portfolios[i].Transactions(),
-			EquityCurve: []float64{},
-		}
-	}
-
-	return &BacktestResult{
-		StartDate:   b.startDate,
-		EndDate:     b.endDate,
-		InitialCash: b.initialCash,
-		Results:     results,
-	}
 }
