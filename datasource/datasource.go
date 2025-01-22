@@ -1,6 +1,7 @@
 package datasource
 
 import (
+	"encoding/binary"
 	"encoding/csv"
 	"fmt"
 	"math"
@@ -24,13 +25,8 @@ const (
 
 // DataSource 数据源接口
 type DataSource interface {
-	// 获取指定周期的数据
 	GetData(symbol string, period PeriodType, start, end time.Time) ([]*types.DataPoint, error)
-
-	// 获取支持的所有周期
 	GetSupportedPeriods() []PeriodType
-
-	// 将数据转换为指定周期
 	ConvertPeriod(data []*types.DataPoint, targetPeriod PeriodType) ([]*types.DataPoint, error)
 }
 
@@ -41,29 +37,6 @@ type CSVDataSource struct {
 
 func NewCSVDataSource(path string) *CSVDataSource {
 	return &CSVDataSource{path: path}
-}
-
-// DetectPeriod 根据数据时间间隔自动判断周期
-func (ds *CSVDataSource) DetectPeriod(data []*types.DataPoint) PeriodType {
-	if len(data) < 2 {
-		return PeriodTypeDay
-	}
-
-	// 计算时间间隔
-	interval := data[1].Timestamp.Sub(data[0].Timestamp)
-
-	switch {
-	case interval < time.Hour:
-		return PeriodTypeMinute
-	case interval < 24*time.Hour:
-		return PeriodTypeHour
-	case interval < 7*24*time.Hour:
-		return PeriodTypeDay
-	case interval < 30*24*time.Hour:
-		return PeriodTypeWeek
-	default:
-		return PeriodTypeMonth
-	}
 }
 
 func (ds *CSVDataSource) GetData(symbol string, period PeriodType, start, end time.Time) ([]*types.DataPoint, error) {
@@ -111,6 +84,102 @@ func (ds *CSVDataSource) GetData(symbol string, period PeriodType, start, end ti
 	return points, nil
 }
 
+func (ds *CSVDataSource) GetSupportedPeriods() []PeriodType {
+	return []PeriodType{PeriodTypeDay}
+}
+
+func (ds *CSVDataSource) ConvertPeriod(data []*types.DataPoint, targetPeriod PeriodType) ([]*types.DataPoint, error) {
+	if targetPeriod == PeriodTypeDay {
+		return data, nil
+	}
+
+	// 按周转换
+	if targetPeriod == PeriodTypeWeek {
+		return convertToWeekly(data)
+	}
+
+	return nil, fmt.Errorf("unsupported period conversion: %v", targetPeriod)
+}
+
+// TDXDataSource 通达信数据源
+type TDXDataSource struct {
+	path string
+}
+
+func NewTDXDataSource(path string) *TDXDataSource {
+	return &TDXDataSource{path: path}
+}
+
+// TDXDayRecord 通达信日线数据结构
+type TDXDayRecord struct {
+	Date     uint32
+	Open     uint32
+	High     uint32
+	Low      uint32
+	Close    uint32
+	Amount   uint32
+	Volume   uint32
+	Reserved [4]byte
+}
+
+func (ds *TDXDataSource) GetData(symbol string, period PeriodType, start, end time.Time) ([]*types.DataPoint, error) {
+	file, err := os.Open(ds.path)
+	if err != nil {
+		return nil, fmt.Errorf("打开文件失败: %v", err)
+	}
+	defer file.Close()
+
+	// 获取文件大小
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("获取文件信息失败: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
+	// 检查文件大小是否合理
+	recordSize := int64(binary.Size(TDXDayRecord{}))
+	if fileSize%recordSize != 0 {
+		return nil, fmt.Errorf("文件大小不匹配，可能已损坏")
+	}
+
+	// 读取文件内容
+	records := make([]TDXDayRecord, fileSize/recordSize)
+	err = binary.Read(file, binary.LittleEndian, &records)
+	if err != nil {
+		return nil, fmt.Errorf("读取文件失败: %v", err)
+	}
+
+	var points []*types.DataPoint
+	var closePrices []float64
+
+	for _, record := range records {
+		// 转换日期格式
+		year := int(record.Date / 10000)
+		month := int((record.Date % 10000) / 100)
+		day := int(record.Date % 100)
+		timestamp := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+
+		if timestamp.After(start) && timestamp.Before(end) {
+			closePrices = append(closePrices, float64(record.Close))
+			ma5 := calculateMA(closePrices, 5)
+
+			points = append(points, &types.DataPoint{
+				Timestamp: timestamp,
+				Open:      float64(record.Open) / 100,
+				High:      float64(record.High) / 100,
+				Low:       float64(record.Low) / 100,
+				Close:     float64(record.Close) / 100,
+				Volume:    float64(record.Volume),
+				Indicators: map[string]float64{
+					"MA5": ma5,
+				},
+			})
+		}
+	}
+
+	return points, nil
+}
+
 // calculateMA 计算移动平均线
 func calculateMA(prices []float64, period int) float64 {
 	if len(prices) < period {
@@ -124,11 +193,11 @@ func calculateMA(prices []float64, period int) float64 {
 	return sum / float64(period)
 }
 
-func (ds *CSVDataSource) GetSupportedPeriods() []PeriodType {
+func (ds *TDXDataSource) GetSupportedPeriods() []PeriodType {
 	return []PeriodType{PeriodTypeDay}
 }
 
-func (ds *CSVDataSource) ConvertPeriod(data []*types.DataPoint, targetPeriod PeriodType) ([]*types.DataPoint, error) {
+func (ds *TDXDataSource) ConvertPeriod(data []*types.DataPoint, targetPeriod PeriodType) ([]*types.DataPoint, error) {
 	if targetPeriod == PeriodTypeDay {
 		return data, nil
 	}

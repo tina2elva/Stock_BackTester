@@ -18,12 +18,20 @@ import (
 )
 
 func main() {
-	// 初始化数据源
+	// 测试通达信数据源
+	tdxDs := datasource.NewTDXDataSource("data/sh600036.day")
+	startDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC)
+	tdxData, err := tdxDs.GetData("600036.SH", datasource.PeriodTypeDay, startDate, endDate)
+	if err != nil {
+		log.Fatalf("获取通达信数据失败: %v", err)
+	}
+	fmt.Printf("成功读取 %d 条通达信数据\n", len(tdxData))
+
+	// 使用CSV数据源
 	ds := datasource.NewCSVDataSource("data/cmb.csv")
 
 	// 获取招商银行2020-2022年历史数据
-	startDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	endDate := time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC)
 	data, err := ds.GetData("600036.SH", datasource.PeriodTypeDay, startDate, endDate)
 	if err != nil {
 		log.Fatalf("获取数据失败: %v", err)
@@ -49,7 +57,7 @@ func main() {
 	)
 
 	// 初始化回测引擎
-	bt := backtest.NewBacktest(startDate, endDate, initialCash, ds, broker, logger)
+	bt := backtest.NewBacktest(startDate, endDate, initialCash, tdxDs, broker, logger)
 	for _, strategy := range strategies {
 		bt.AddStrategy(strategy)
 	}
