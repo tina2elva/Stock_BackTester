@@ -37,9 +37,11 @@ func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]type
 			AxisLabel: &opts.AxisLabel{
 				Rotate: 45,
 			},
+			GridIndex: 0,
 		}),
 		charts.WithYAxisOpts(opts.YAxis{
-			Name: "交易量",
+			Name:      "交易量",
+			GridIndex: 0,
 		}),
 	)
 
@@ -101,9 +103,24 @@ func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]type
 				float32(candle.High),
 			},
 		})
-		volumeData = append(volumeData, opts.BarData{
-			Value: float32(candle.Volume),
-		})
+		// 根据涨跌设置交易量颜色
+		if candle.Close > candle.Open {
+			// 上涨 - 绿色
+			volumeData = append(volumeData, opts.BarData{
+				Value: float32(candle.Volume),
+				ItemStyle: &opts.ItemStyle{
+					Color: "#00da3c",
+				},
+			})
+		} else {
+			// 下跌 - 红色
+			volumeData = append(volumeData, opts.BarData{
+				Value: float32(candle.Volume),
+				ItemStyle: &opts.ItemStyle{
+					Color: "#ec0000",
+				},
+			})
+		}
 		if macdValues, ok := candle.Indicators["MACD"]; ok {
 			if macdMap, ok := macdValues.(map[string][]float64); ok {
 				for name, values := range macdMap {
@@ -192,24 +209,33 @@ func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]type
 			AxisLabel: &opts.AxisLabel{
 				Rotate: 45,
 			},
+			GridIndex: 0,
 		}),
 		charts.WithYAxisOpts(opts.YAxis{
-			Name: "价格",
+			Name:      "价格",
+			GridIndex: 0,
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
 			Type:       "inside",
 			Start:      50,
 			End:        100,
-			XAxisIndex: []int{0},
+			XAxisIndex: []int{0, 1},
+			YAxisIndex: []int{0},
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
 			Type:       "slider",
 			Start:      50,
 			End:        100,
-			XAxisIndex: []int{0},
+			XAxisIndex: []int{0, 1},
+			YAxisIndex: []int{0},
 		}),
 		charts.WithXAxisOpts(opts.XAxis{
 			SplitNumber: 20,
+		}),
+		charts.WithInitializationOpts(opts.Initialization{
+			Width:  "100%",
+			Height: "800px",
+			Theme:  "light",
 		}),
 	)
 

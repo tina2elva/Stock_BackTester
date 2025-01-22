@@ -25,13 +25,11 @@ func (l *ConsoleLogger) LogTrade(trade types.Trade) {
 	totalAmount := trade.Quantity * trade.Price
 	netAmount := totalAmount - trade.Fee
 
-	fmt.Printf("[交易] %s %s %.2f股 @ %.2f元\n",
+	fmt.Printf("[交易] %s %s %.2f股 @ %.2f元,交易总额: %.2f元, 手续费: %.2f元, 净交易额: %.2f元\n",
 		trade.Timestamp.Format("2006-01-02 15:04:05"),
 		action,
 		trade.Quantity,
-		trade.Price)
-
-	fmt.Printf("    交易总额: %.2f元, 手续费: %.2f元, 净交易额: %.2f元\n",
+		trade.Price,
 		totalAmount,
 		trade.Fee,
 		netAmount)

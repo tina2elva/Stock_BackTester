@@ -43,6 +43,29 @@ func NewCSVDataSource(path string) *CSVDataSource {
 	return &CSVDataSource{path: path}
 }
 
+// DetectPeriod 根据数据时间间隔自动判断周期
+func (ds *CSVDataSource) DetectPeriod(data []*types.DataPoint) PeriodType {
+	if len(data) < 2 {
+		return PeriodTypeDay
+	}
+
+	// 计算时间间隔
+	interval := data[1].Timestamp.Sub(data[0].Timestamp)
+
+	switch {
+	case interval < time.Hour:
+		return PeriodTypeMinute
+	case interval < 24*time.Hour:
+		return PeriodTypeHour
+	case interval < 7*24*time.Hour:
+		return PeriodTypeDay
+	case interval < 30*24*time.Hour:
+		return PeriodTypeWeek
+	default:
+		return PeriodTypeMonth
+	}
+}
+
 func (ds *CSVDataSource) GetData(symbol string, period PeriodType, start, end time.Time) ([]*types.DataPoint, error) {
 	file, err := os.Open(ds.path)
 	if err != nil {
