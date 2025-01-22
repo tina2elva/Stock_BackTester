@@ -37,6 +37,8 @@ type StrategyResult struct {
 	Trades      []types.Trade
 	EquityCurve []float64
 	MaxDrawdown float64
+	Returns     []float64 // 每日收益率序列
+	Values      []float64 // 每日净值序列
 }
 
 func NewBacktest(startDate time.Time, endDate time.Time, initialCash float64, dataSource datasource.DataSource, broker broker.Broker, logger types.Logger, symbols []string) *Backtest {
@@ -122,6 +124,12 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 	// Calculate results
 	results := make([]StrategyResult, len(b.strategies))
 	for i := range b.strategies {
+		// 计算每日收益率
+		returns := make([]float64, len(equityCurves[i]))
+		for j := 1; j < len(equityCurves[i]); j++ {
+			returns[j] = (equityCurves[i][j] - equityCurves[i][j-1]) / equityCurves[i][j-1]
+		}
+
 		results[i] = StrategyResult{
 			Strategy:    b.strategies[i],
 			Portfolio:   b.portfolios[i],
@@ -129,6 +137,8 @@ func (b *Backtest) Run() (*BacktestResult, error) {
 			Trades:      b.portfolios[i].Transactions(),
 			EquityCurve: equityCurves[i],
 			MaxDrawdown: calculateMaxDrawdown(equityCurves[i]),
+			Returns:     returns,
+			Values:      equityCurves[i],
 		}
 	}
 

@@ -57,7 +57,7 @@ func main() {
 	)
 
 	// 初始化回测引擎
-	bt := backtest.NewBacktest(startDate, endDate, initialCash, ds, broker, logger, []string{"600036.SH"})
+	bt := backtest.NewBacktest(startDate, endDate, initialCash, tdxDs, broker, logger, []string{"600036.SH"})
 	for _, strategy := range strategies {
 		bt.AddStrategy(strategy)
 	}
@@ -100,6 +100,21 @@ func main() {
 		fmt.Printf("平均盈利: %.2f\n", avgProfit)
 		fmt.Printf("平均亏损: %.2f\n", avgLoss)
 		fmt.Printf("盈亏比: %.2f\n", profitLossRatio)
+
+		// 计算新增指标
+		returns := result.Returns
+		annualVolatility := analyzer.AnnualVolatility(returns)
+		sortinoRatio := analyzer.SortinoRatio(returns, 0)
+		calmarRatio := analyzer.CalmarRatio(finalValue, maxDrawdown, duration)
+		drawdownDuration := analyzer.DrawdownDuration(result.Values)
+		var95 := analyzer.ValueAtRisk(returns, 0.95)
+
+		// 显示新增指标
+		fmt.Printf("年波动率: %.2f%%\n", annualVolatility*100)
+		fmt.Printf("索提诺比率: %.2f\n", sortinoRatio)
+		fmt.Printf("卡尔玛比率: %.2f\n", calmarRatio)
+		fmt.Printf("最大回撤持续时间: %s\n", drawdownDuration)
+		fmt.Printf("95%%置信度VaR: %.2f%%\n", var95*100)
 
 		// 将DataPoint转换为Candle
 		candles := make([]types.Candle, len(data))

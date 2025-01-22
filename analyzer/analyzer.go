@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"math"
+	"sort"
 	"stock/common/types"
 	"time"
 )
@@ -133,4 +134,78 @@ func (a *Analyzer) ProfitLossRatio() float64 {
 		return 0
 	}
 	return avgProfit / avgLoss
+}
+
+// 计算年波动率
+func (a *Analyzer) AnnualVolatility(returns []float64) float64 {
+	stdDev := a.StandardDeviation(returns)
+	return stdDev * math.Sqrt(252) // 252个交易日
+}
+
+// 计算索提诺比率
+func (a *Analyzer) SortinoRatio(returns []float64, targetReturn float64) float64 {
+	downsideReturns := make([]float64, 0)
+	for _, r := range returns {
+		if r < targetReturn {
+			downsideReturns = append(downsideReturns, r)
+		}
+	}
+	downsideDev := a.StandardDeviation(downsideReturns)
+	if downsideDev == 0 {
+		return 0
+	}
+	return (a.Mean(returns) - targetReturn) / downsideDev
+}
+
+// 计算卡尔玛比率
+func (a *Analyzer) CalmarRatio(finalValue float64, maxDrawdown float64, duration time.Duration) float64 {
+	if maxDrawdown == 0 {
+		return 0
+	}
+	annualizedReturn := a.AnnualizedReturn(finalValue, duration)
+	return annualizedReturn / maxDrawdown
+}
+
+// 计算回撤持续时间
+func (a *Analyzer) DrawdownDuration(values []float64) time.Duration {
+	if len(values) == 0 {
+		return 0
+	}
+
+	var maxDuration time.Duration
+	var currentDuration time.Duration
+	peak := values[0]
+
+	for i := 1; i < len(values); i++ {
+		if values[i] > peak {
+			peak = values[i]
+			currentDuration = 0
+		} else {
+			currentDuration += time.Duration(1) * time.Hour * 24 // 假设每天一个数据点
+		}
+		if currentDuration > maxDuration {
+			maxDuration = currentDuration
+		}
+	}
+
+	return maxDuration
+}
+
+// 计算风险价值 (VaR)
+func (a *Analyzer) ValueAtRisk(returns []float64, confidenceLevel float64) float64 {
+	if len(returns) == 0 {
+		return 0
+	}
+
+	// 对收益率排序
+	sortedReturns := make([]float64, len(returns))
+	copy(sortedReturns, returns)
+	sort.Float64s(sortedReturns)
+
+	// 计算VaR
+	index := int(math.Floor(float64(len(sortedReturns)) * (1 - confidenceLevel)))
+	if index >= len(sortedReturns) {
+		index = len(sortedReturns) - 1
+	}
+	return sortedReturns[index]
 }
