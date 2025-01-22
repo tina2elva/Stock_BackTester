@@ -2,16 +2,16 @@ package analyzer
 
 import (
 	"math"
-	"stock/common"
+	"stock/common/types"
 	"time"
 )
 
 type Analyzer struct {
-	trades      []common.Trade
+	trades      []types.Trade
 	initialCash float64
 }
 
-func NewAnalyzer(trades []common.Trade, initialCash float64) *Analyzer {
+func NewAnalyzer(trades []types.Trade, initialCash float64) *Analyzer {
 	return &Analyzer{
 		trades:      trades,
 		initialCash: initialCash,
@@ -84,7 +84,7 @@ func (a *Analyzer) StandardDeviation(returns []float64) float64 {
 func (a *Analyzer) WinRate() float64 {
 	winCount := 0
 	for _, trade := range a.trades {
-		if trade.Type == common.ActionSell && trade.Price > 0 {
+		if trade.Type == types.ActionSell && trade.Price > 0 {
 			winCount++
 		}
 	}
@@ -101,7 +101,7 @@ func (a *Analyzer) AverageProfitLoss() (float64, float64) {
 		buy := a.trades[i]
 		sell := a.trades[i+1]
 
-		if buy.Type == common.ActionBuy && sell.Type == common.ActionSell {
+		if buy.Type == types.ActionBuy && sell.Type == types.ActionSell {
 			profit := sell.Price - buy.Price
 			if profit > 0 {
 				totalProfit += profit

@@ -1,301 +1,154 @@
 package backtest
 
 import (
-	"math"
 	"stock/broker"
-	"stock/common"
+	"stock/common/types"
+	"stock/datasource"
 	"stock/orders"
 	"stock/portfolio"
 	"stock/strategy"
-	"sync"
+	"time"
 )
 
 type Backtest struct {
-	data         []*common.DataPoint
-	strategies   []strategy.Strategy
-	portfolios   []*portfolio.Portfolio
-	broker       broker.Broker
-	logger       common.Logger
-	logTrades    bool // 是否记录交易日志
-	feeConfig    common.FeeConfig
-	initialCash  float64
-	orderManager *orders.OrderManager
+	startDate   time.Time
+	endDate     time.Time
+	initialCash float64
+	dataSource  datasource.DataSource
+	strategies  []strategy.Strategy
+	portfolios  []*portfolio.Portfolio
+	broker      broker.Broker
+	logger      types.Logger
+}
+
+type BacktestResult struct {
+	StartDate   time.Time
+	EndDate     time.Time
+	InitialCash float64
+	Results     []StrategyResult
+}
+
+type StrategyResult struct {
+	Strategy    strategy.Strategy
+	Portfolio   *portfolio.Portfolio
+	FinalValue  float64
+	Trades      []types.Trade
+	EquityCurve []float64
+}
+
+func NewBacktest(startDate time.Time, endDate time.Time, initialCash float64, dataSource datasource.DataSource, broker broker.Broker, logger types.Logger) *Backtest {
+	return &Backtest{
+		startDate:   startDate,
+		endDate:     endDate,
+		initialCash: initialCash,
+		dataSource:  dataSource,
+		broker:      broker,
+		logger:      logger,
+	}
 }
 
 func (b *Backtest) AddStrategy(strategy strategy.Strategy) {
 	b.strategies = append(b.strategies, strategy)
-	// 为每个策略创建一个对应的portfolio
-	broker := broker.NewSimulatedBroker(0.0003, b.logger, b.initialCash) // 使用默认佣金率和日志记录器
-	b.portfolios = append(b.portfolios, portfolio.NewPortfolio(b.initialCash, broker, b.orderManager))
+	portfolio := portfolio.NewPortfolio(b.initialCash, b.broker, orders.NewOrderManager(b.broker))
+	b.portfolios = append(b.portfolios, portfolio)
 }
 
-type PerformanceMetrics struct {
-	TotalReturn  float64
-	MaxDrawdown  float64
-	WinRate      float64
-	SharpeRatio  float64
-	SortinoRatio float64
-	Volatility   float64
-	ProfitFactor float64
-	NumTrades    int
-}
-
-type BacktestResults struct {
-	FinalValue  float64
-	Positions   map[string]float64
-	Cash        float64
-	Trades      []common.Trade
-	Metrics     PerformanceMetrics
-	EquityCurve []float64
-}
-
-func NewBacktest(data []*common.DataPoint, initialCash float64, feeConfig common.FeeConfig, broker broker.Broker, logger common.Logger, logTrades bool, orderManager *orders.OrderManager) *Backtest {
-	return &Backtest{
-		data:         data,
-		feeConfig:    feeConfig,
-		strategies:   []strategy.Strategy{},
-		portfolios:   []*portfolio.Portfolio{},
-		logger:       logger,
-		logTrades:    logTrades,
-		initialCash:  initialCash,
-		orderManager: orderManager,
+func (b *Backtest) Run() (*BacktestResult, error) {
+	if len(b.strategies) == 0 {
+		return nil, types.ErrNoStrategy
 	}
-}
 
-// DefaultFeeConfig 返回默认的费用配置
-func DefaultFeeConfig() common.FeeConfig {
-	return common.FeeConfig{
-		StampDuty:  0.001,  // 印花税 0.1%
-		Commission: 0.0003, // 佣金 0.03%
-		Fee:        5.0,    // 固定手续费 5元
-		Slippage:   0.0005, // 滑点 0.05%
-		MinLotSize: 1,      // 最小交易单位 1手
+	// Initialize strategies
+	for index, strategy := range b.strategies {
+		err := strategy.OnStart(b.portfolios[index])
+		if err != nil {
+			return nil, err
+		}
 	}
-}
 
-func (b *Backtest) Run() {
-	var wg sync.WaitGroup
-	wg.Add(len(b.strategies))
+	// Main backtest loop
+	equityCurves := make([][]float64, len(b.strategies))
 
-	for i := range b.strategies {
-		go func(index int) {
-			defer wg.Done()
-			for _, dataPoint := range b.data {
-				// 自动记录交易日志
-				if b.logger != nil {
-					b.logger.LogData(dataPoint)
-				}
-				b.strategies[index].OnData(dataPoint, b.portfolios[index])
+	data, err := b.dataSource.GetData("", b.startDate, b.endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	for index, strategy := range b.strategies {
+		for _, d := range data {
+			err := strategy.OnData(d, b.portfolios[index])
+			if err != nil {
+				return nil, err
 			}
-			// 自动记录结束日志
-			if b.logger != nil {
-				b.logger.LogEnd(b.portfolios[index])
-			}
-			b.strategies[index].OnEnd(b.portfolios[index])
-		}(i)
+			// Record daily portfolio value
+			equityCurves[index] = append(equityCurves[index], b.portfolios[index].GetValue())
+		}
 	}
-	wg.Wait()
-}
 
-func (b *Backtest) Results() []*BacktestResults {
-	var results []*BacktestResults
+	// Finalize strategies
+	for index, strategy := range b.strategies {
+		b.logger.LogEnd(b.portfolios[index])
+		err := strategy.OnEnd(b.portfolios[index])
+		if err != nil {
+			return nil, err
+		}
+	}
 
+	// Calculate results
+	results := make([]StrategyResult, len(b.strategies))
 	for i := range b.strategies {
-		result := &BacktestResults{
-			FinalValue:  b.portfolios[i].Balance(),
-			Positions:   b.portfolios[i].GetPositions(),
-			Cash:        b.portfolios[i].AvailableCash(),
+		results[i] = StrategyResult{
+			Strategy:    b.strategies[i],
+			Portfolio:   b.portfolios[i],
+			FinalValue:  b.portfolios[i].GetValue(),
 			Trades:      b.portfolios[i].Transactions(),
-			EquityCurve: b.calculateEquityCurve(b.portfolios[i]),
-		}
-		result.Metrics = b.calculateMetrics(result, b.portfolios[i])
-		results = append(results, result)
-	}
-	return results
-}
-
-func (b *Backtest) calculateEquityCurve(p *portfolio.Portfolio) []float64 {
-	var equityCurve []float64
-	initialValue := p.AvailableCash()
-	currentValue := initialValue
-
-	for _, trade := range p.Transactions() {
-		tradeValue := trade.Price * trade.Quantity
-		if trade.Type == common.ActionBuy {
-			currentValue -= tradeValue
-		} else if trade.Type == common.ActionSell {
-			currentValue += tradeValue
-		}
-		equityCurve = append(equityCurve, currentValue)
-	}
-	return equityCurve
-}
-
-func (b *Backtest) calculateMetrics(results *BacktestResults, p *portfolio.Portfolio) PerformanceMetrics {
-	metrics := PerformanceMetrics{
-		NumTrades: len(results.Trades),
-	}
-
-	if len(results.Trades) == 0 {
-		return metrics
-	}
-
-	// Calculate returns and drawdowns
-	var returns []float64
-	var equityCurve []float64
-	initialValue := p.GetInitialValue()
-	currentValue := initialValue
-
-	for _, trade := range results.Trades {
-		tradeValue := trade.Price * trade.Quantity
-		if trade.Type == common.ActionBuy {
-			currentValue -= tradeValue
-		} else if trade.Type == common.ActionSell {
-			currentValue += tradeValue
-		}
-		equityCurve = append(equityCurve, currentValue)
-		returns = append(returns, (currentValue-initialValue)/initialValue)
-	}
-
-	// Calculate metrics
-	metrics.TotalReturn = (results.FinalValue - initialValue) / initialValue
-	metrics.MaxDrawdown = calculateMaxDrawdown(equityCurve)
-	metrics.WinRate = calculateWinRate(results.Trades)
-	metrics.SharpeRatio = calculateSharpeRatio(returns)
-	metrics.SortinoRatio = calculateSortinoRatio(returns)
-	metrics.Volatility = calculateVolatility(returns)
-	metrics.ProfitFactor = calculateProfitFactor(results.Trades)
-
-	return metrics
-}
-
-func calculateMaxDrawdown(equityCurve []float64) float64 {
-	if len(equityCurve) == 0 {
-		return 0.0
-	}
-
-	peak := equityCurve[0]
-	maxDrawdown := 0.0
-
-	for _, value := range equityCurve {
-		if value > peak {
-			peak = value
-		}
-		drawdown := (peak - value) / peak
-		if drawdown > maxDrawdown {
-			maxDrawdown = drawdown
+			EquityCurve: equityCurves[i],
 		}
 	}
-	return maxDrawdown
+
+	return &BacktestResult{
+		StartDate:   b.startDate,
+		EndDate:     b.endDate,
+		InitialCash: b.initialCash,
+		Results:     results,
+	}, nil
 }
 
-func calculateWinRate(trades []common.Trade) float64 {
-	if len(trades) == 0 {
-		return 0.0
-	}
+func (b *Backtest) AnalyzeTrades() (float64, float64, float64) {
+	var totalProfit float64
+	var totalLoss float64
+	var totalTrades int
 
-	wins := 0
-	for _, trade := range trades {
-		if trade.Type == common.ActionSell && trade.Price > 0 {
-			wins++
-		}
-	}
-	return float64(wins) / float64(len(trades))
-}
-
-func calculateSharpeRatio(returns []float64) float64 {
-	if len(returns) == 0 {
-		return 0.0
-	}
-
-	meanReturn := calculateMean(returns)
-	stdDev := calculateStdDev(returns)
-
-	// Assuming risk-free rate of 0 for simplicity
-	return meanReturn / stdDev
-}
-
-func calculateSortinoRatio(returns []float64) float64 {
-	if len(returns) == 0 {
-		return 0.0
-	}
-
-	meanReturn := calculateMean(returns)
-	downsideDev := calculateDownsideDeviation(returns)
-
-	return meanReturn / downsideDev
-}
-
-func calculateVolatility(returns []float64) float64 {
-	return calculateStdDev(returns)
-}
-
-func calculateProfitFactor(trades []common.Trade) float64 {
-	if len(trades) == 0 {
-		return 0.0
-	}
-
-	grossProfit := 0.0
-	grossLoss := 0.0
-
-	for _, trade := range trades {
-		if trade.Type == common.ActionSell {
-			profit := trade.Price * trade.Quantity
-			if profit > 0 {
-				grossProfit += profit
-			} else {
-				grossLoss += -profit
+	for _, portfolio := range b.portfolios {
+		for _, trade := range portfolio.Transactions() {
+			totalTrades++
+			if trade.Type == types.ActionBuy {
+				totalProfit += trade.Price * trade.Quantity
+			} else if trade.Type == types.ActionSell {
+				totalLoss += trade.Price * trade.Quantity
 			}
 		}
 	}
 
-	if grossLoss == 0 {
-		return 0.0
-	}
-	return grossProfit / grossLoss
+	return totalProfit, totalLoss, float64(totalTrades)
 }
 
-// Helper functions
-func calculateMean(values []float64) float64 {
-	sum := 0.0
-	for _, v := range values {
-		sum += v
-	}
-	return sum / float64(len(values))
-}
-
-func calculateStdDev(values []float64) float64 {
-	if len(values) == 0 {
-		return 0.0
-	}
-
-	mean := calculateMean(values)
-	variance := 0.0
-
-	for _, v := range values {
-		diff := v - mean
-		variance += diff * diff
-	}
-
-	variance /= float64(len(values))
-	return math.Sqrt(variance)
-}
-
-func calculateDownsideDeviation(returns []float64) float64 {
-	if len(returns) == 0 {
-		return 0.0
-	}
-
-	// Using 0 as the minimum acceptable return
-	mar := 0.0
-	sumSquares := 0.0
-
-	for _, r := range returns {
-		if r < mar {
-			diff := r - mar
-			sumSquares += diff * diff
+func (b *Backtest) Results() *BacktestResult {
+	results := make([]StrategyResult, len(b.strategies))
+	for i := range b.strategies {
+		results[i] = StrategyResult{
+			Strategy:    b.strategies[i],
+			Portfolio:   b.portfolios[i],
+			FinalValue:  b.portfolios[i].GetValue(),
+			Trades:      b.portfolios[i].Transactions(),
+			EquityCurve: []float64{},
 		}
 	}
 
-	return math.Sqrt(sumSquares / float64(len(returns)))
+	return &BacktestResult{
+		StartDate:   b.startDate,
+		EndDate:     b.endDate,
+		InitialCash: b.initialCash,
+		Results:     results,
+	}
 }

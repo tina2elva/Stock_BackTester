@@ -2,11 +2,11 @@ package indicators
 
 import (
 	"errors"
-	"stock/common"
+	"stock/common/types"
 )
 
 // RSI 计算相对强弱指数
-func RSI(data []common.Bar, period int) ([]float64, error) {
+func RSI(data []types.Bar, period int) ([]float64, error) {
 	if len(data) < period+1 {
 		return nil, errors.New("not enough data points to calculate RSI")
 	}

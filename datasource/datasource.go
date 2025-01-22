@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"time"
 
-	"stock/common"
+	"stock/common/types"
 )
 
 // DataSource 数据源接口
 type DataSource interface {
-	GetData(symbol string, start, end time.Time) ([]*common.DataPoint, error)
+	GetData(symbol string, start, end time.Time) ([]*types.DataPoint, error)
 }
 
 // CSVDataSource CSV文件数据源
@@ -23,7 +23,7 @@ func NewCSVDataSource(path string) *CSVDataSource {
 	return &CSVDataSource{path: path}
 }
 
-func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*common.DataPoint, error) {
+func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*types.DataPoint, error) {
 	file, err := os.Open(ds.path)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*common
 		return nil, err
 	}
 
-	var points []*common.DataPoint
+	var points []*types.DataPoint
 	var closePrices []float64
 
 	for _, record := range records[1:] { // 跳过表头
@@ -51,7 +51,7 @@ func (ds *CSVDataSource) GetData(symbol string, start, end time.Time) ([]*common
 			closePrices = append(closePrices, close)
 			ma5 := calculateMA(closePrices, 5)
 
-			points = append(points, &common.DataPoint{
+			points = append(points, &types.DataPoint{
 				Timestamp: timestamp,
 				Open:      open,
 				High:      high,

@@ -3,7 +3,7 @@ package backtest
 import (
 	"time"
 
-	"stock/common"
+	"stock/common/types"
 	"stock/datasource"
 	"stock/strategy"
 )
@@ -37,22 +37,29 @@ func NewDefaultConfig() *Config {
 	}
 }
 
+// DefaultFeeConfig 默认费用配置
+var DefaultFeeConfig = Config{
+	Commission:  0.0003,  // 佣金：万分之三
+	StampDuty:   0.001,   // 印花税：千分之一
+	TransferFee: 0.00002, // 过户费：万分之0.2
+}
+
 // Validate 验证配置
 func (c *Config) Validate() error {
 	if c.DataSource == nil {
-		return common.ErrInvalidDataSource
+		return types.ErrInvalidDataSource
 	}
 	if c.Symbol == "" {
-		return common.ErrInvalidSymbol
+		return types.ErrInvalidSymbol
 	}
 	if c.StartDate.IsZero() || c.EndDate.IsZero() {
-		return common.ErrInvalidDateRange
+		return types.ErrInvalidDateRange
 	}
 	if c.InitialCash <= 0 {
-		return common.ErrInvalidInitialCash
+		return types.ErrInvalidInitialCash
 	}
 	if len(c.Strategies) == 0 {
-		return common.ErrNoStrategy
+		return types.ErrNoStrategy
 	}
 	return nil
 }

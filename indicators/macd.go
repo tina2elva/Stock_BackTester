@@ -3,11 +3,11 @@ package indicators
 import (
 	"errors"
 	"math"
-	"stock/common"
+	"stock/common/types"
 )
 
 // MACD calculates Moving Average Convergence Divergence
-func MACD(bars []common.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]common.MACDValue, error) {
+func MACD(bars []types.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]types.MACDValue, error) {
 	if len(bars) < slowPeriod {
 		return nil, errors.New("not enough data points")
 	}
@@ -47,9 +47,9 @@ func MACD(bars []common.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]common
 	}
 
 	// Prepare result
-	result := make([]common.MACDValue, len(bars))
+	result := make([]types.MACDValue, len(bars))
 	for i := range result {
-		result[i] = common.MACDValue{
+		result[i] = types.MACDValue{
 			MACD:      macdLine[i],
 			Signal:    signalLine[i],
 			Histogram: histogram[i],
@@ -60,7 +60,7 @@ func MACD(bars []common.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]common
 }
 
 // EMA calculates Exponential Moving Average
-func EMA(bars []common.Bar, period int) []float64 {
+func EMA(bars []types.Bar, period int) []float64 {
 	if len(bars) < period {
 		return nil
 	}
@@ -84,7 +84,7 @@ func EMA(bars []common.Bar, period int) []float64 {
 }
 
 // SMA calculates Simple Moving Average
-func SMA(bars []common.Bar, period int) []float64 {
+func SMA(bars []types.Bar, period int) []float64 {
 	if len(bars) < period {
 		return nil
 	}

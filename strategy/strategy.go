@@ -1,12 +1,14 @@
 package strategy
 
 import (
-	"stock/common"
+	"stock/common/types"
+	"stock/portfolio"
 )
 
 type Strategy interface {
-	OnData(data *common.DataPoint, portfolio common.Portfolio)
-	OnEnd(portfolio common.Portfolio)
-	Calculate(candles []common.Candle) map[string][]float64
+	OnStart(portfolio *portfolio.Portfolio) error
+	OnData(data *types.DataPoint, portfolio *portfolio.Portfolio) error
+	OnEnd(portfolio *portfolio.Portfolio) error
+	Calculate(candles []types.Candle) map[string][]float64
 	Name() string
 }

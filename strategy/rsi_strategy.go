@@ -1,7 +1,7 @@
 package strategy
 
 import (
-	"stock/common"
+	"stock/common/types"
 	"stock/indicators"
 )
 
@@ -9,11 +9,11 @@ type RSIStrategy struct {
 	period     int
 	overbought float64
 	oversold   float64
-	dataBuffer []common.Bar
-	logger     common.Logger
+	dataBuffer []types.Bar
+	logger     types.Logger
 }
 
-func NewRSIStrategy(period int, overbought, oversold float64, logger common.Logger) *RSIStrategy {
+func NewRSIStrategy(period int, overbought, oversold float64, logger types.Logger) *RSIStrategy {
 	// 优化RSI参数
 	return &RSIStrategy{
 		period:     9,  // 缩短周期以提高灵敏度
@@ -27,8 +27,8 @@ func (s *RSIStrategy) Name() string {
 	return "RSI Strategy"
 }
 
-func (s *RSIStrategy) Run(data []common.Bar) []common.Signal {
-	signals := make([]common.Signal, len(data))
+func (s *RSIStrategy) Run(data []types.Bar) []types.Signal {
+	signals := make([]types.Signal, len(data))
 
 	// 计算RSI值
 	rsiValues, err := indicators.RSI(data, s.period)
@@ -47,15 +47,15 @@ func (s *RSIStrategy) Run(data []common.Bar) []common.Signal {
 
 		// 生成交易信号，增加过滤条件
 		if rsi < s.oversold && rsi > 30 { // 在超卖区域但不过度
-			signals[i] = common.Signal{
-				Action: common.ActionBuy,
+			signals[i] = types.Signal{
+				Action: types.ActionBuy,
 				Price:  data[i].Close,
 				Time:   data[i].Time,
 				Qty:    2, // 增加交易单位
 			}
 		} else if rsi > s.overbought && rsi < 70 { // 在超买区域但不过度
-			signals[i] = common.Signal{
-				Action: common.ActionSell,
+			signals[i] = types.Signal{
+				Action: types.ActionSell,
 				Price:  data[i].Close,
 				Time:   data[i].Time,
 				Qty:    2, // 增加交易单位
@@ -66,14 +66,14 @@ func (s *RSIStrategy) Run(data []common.Bar) []common.Signal {
 	return signals
 }
 
-func (s *RSIStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio) {
+func (s *RSIStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio) {
 	// 记录数据
 	if s.logger != nil {
 		s.logger.LogData(data)
 	}
 
 	// 添加新数据点到缓冲区
-	s.dataBuffer = append(s.dataBuffer, common.Bar{
+	s.dataBuffer = append(s.dataBuffer, types.Bar{
 		Time:   data.Timestamp.Unix(),
 		Open:   data.Open,
 		High:   data.High,
@@ -104,28 +104,28 @@ func (s *RSIStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio)
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
 		if s.logger != nil {
-			s.logger.LogTrade(common.Trade{
+			s.logger.LogTrade(types.Trade{
 				Timestamp: data.Timestamp,
 				Price:     data.Close,
 				Quantity:  quantity,
-				Type:      common.ActionBuy,
+				Type:      types.ActionBuy,
 			})
 		}
 	} else if currentRSI > s.overbought {
 		quantity := 1.0 // 默认交易1单位
 		portfolio.Sell(data.Timestamp, data.Close, quantity)
 		if s.logger != nil {
-			s.logger.LogTrade(common.Trade{
+			s.logger.LogTrade(types.Trade{
 				Timestamp: data.Timestamp,
 				Price:     data.Close,
 				Quantity:  quantity,
-				Type:      common.ActionSell,
+				Type:      types.ActionSell,
 			})
 		}
 	}
 }
 
-func (s *RSIStrategy) OnEnd(portfolio common.Portfolio) {
+func (s *RSIStrategy) OnEnd(portfolio types.Portfolio) {
 	// 记录结束状态
 	if s.logger != nil {
 		s.logger.LogEnd(portfolio)
@@ -138,11 +138,11 @@ func (s *RSIStrategy) OnEnd(portfolio common.Portfolio) {
 }
 
 // Calculate returns RSI indicator values
-func (s *RSIStrategy) Calculate(candles []common.Candle) map[string][]float64 {
+func (s *RSIStrategy) Calculate(candles []types.Candle) map[string][]float64 {
 	// Convert candles to bars
-	bars := make([]common.Bar, len(candles))
+	bars := make([]types.Bar, len(candles))
 	for i, c := range candles {
-		bars[i] = common.Bar{
+		bars[i] = types.Bar{
 			Time:   c.Timestamp.Unix(),
 			Open:   c.Open,
 			High:   c.High,

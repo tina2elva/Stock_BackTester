@@ -3,14 +3,14 @@ package backtest
 import (
 	"time"
 
-	"stock/common"
+	"stock/common/types"
 )
 
 type portfolioImpl struct {
 	cash         float64
 	initialCash  float64
 	positions    map[string]float64
-	tradeHistory []common.Trade
+	tradeHistory []types.Trade
 }
 
 func NewPortfolio(initialCash float64) *portfolioImpl {
@@ -18,11 +18,11 @@ func NewPortfolio(initialCash float64) *portfolioImpl {
 		cash:         initialCash,
 		initialCash:  initialCash,
 		positions:    make(map[string]float64),
-		tradeHistory: make([]common.Trade, 0),
+		tradeHistory: make([]types.Trade, 0),
 	}
 }
 
-func (p *portfolioImpl) GetTradeHistory() []common.Trade {
+func (p *portfolioImpl) GetTradeHistory() []types.Trade {
 	return p.tradeHistory
 }
 

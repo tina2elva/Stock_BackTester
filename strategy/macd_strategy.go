@@ -2,8 +2,10 @@ package strategy
 
 import (
 	"math"
-	"stock/common"
+	"stock/common/types"
 	"stock/indicators"
+	"stock/portfolio"
+	"time"
 )
 
 type MACDStrategy struct {
@@ -12,7 +14,7 @@ type MACDStrategy struct {
 	signalPeriod int
 	prevMACD     float64
 	prevSignal   float64
-	dataBuffer   []common.Bar
+	dataBuffer   []types.Bar
 }
 
 func NewMACDStrategy(fast, slow, signal int) *MACDStrategy {
@@ -20,18 +22,33 @@ func NewMACDStrategy(fast, slow, signal int) *MACDStrategy {
 		fastPeriod:   fast,
 		slowPeriod:   slow,
 		signalPeriod: signal,
-		dataBuffer:   make([]common.Bar, 0),
+		dataBuffer:   make([]types.Bar, 0),
 		prevMACD:     math.NaN(),
 		prevSignal:   math.NaN(),
 	}
+}
+
+func convertToCommonBars(bars []types.Bar) []types.Bar {
+	commonBars := make([]types.Bar, len(bars))
+	for i, bar := range bars {
+		commonBars[i] = types.Bar{
+			Time:   bar.Time,
+			Open:   bar.Open,
+			High:   bar.High,
+			Low:    bar.Low,
+			Close:  bar.Close,
+			Volume: bar.Volume,
+		}
+	}
+	return commonBars
 }
 
 func (s *MACDStrategy) Name() string {
 	return "MACD Strategy"
 }
 
-func (s *MACDStrategy) Run(data []common.Bar) []common.Signal {
-	signals := make([]common.Signal, len(data))
+func (s *MACDStrategy) Run(data []types.Bar) []types.Signal {
+	signals := make([]types.Signal, len(data))
 
 	// Need at least slowPeriod + signalPeriod bars to calculate MACD
 	if len(data) < s.slowPeriod+s.signalPeriod {
@@ -59,15 +76,15 @@ func (s *MACDStrategy) Run(data []common.Bar) []common.Signal {
 		if !math.IsNaN(macd) && !math.IsNaN(signal) {
 			if !math.IsNaN(s.prevMACD) && !math.IsNaN(s.prevSignal) {
 				if s.prevMACD < s.prevSignal && macd > signal {
-					signals[i] = common.Signal{
-						Action: common.ActionBuy,
+					signals[i] = types.Signal{
+						Action: types.ActionBuy,
 						Price:  data[i].Close,
 						Time:   data[i].Time,
 						Qty:    1, // 默认交易1单位
 					}
 				} else if s.prevMACD > s.prevSignal && macd < signal {
-					signals[i] = common.Signal{
-						Action: common.ActionSell,
+					signals[i] = types.Signal{
+						Action: types.ActionSell,
 						Price:  data[i].Close,
 						Time:   data[i].Time,
 						Qty:    1, // 默认交易1单位
@@ -82,10 +99,18 @@ func (s *MACDStrategy) Run(data []common.Bar) []common.Signal {
 	return signals
 }
 
+// OnStart initializes the strategy
+func (s *MACDStrategy) OnStart(portfolio *portfolio.Portfolio) error {
+	s.dataBuffer = make([]types.Bar, 0)
+	return nil
+}
+
 // OnData handles new market data
-func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio) {
+func (s *MACDStrategy) OnData(data *types.DataPoint, portfolio *portfolio.Portfolio) error {
+	// Process each data point
+
 	// Add new data point to buffer
-	s.dataBuffer = append(s.dataBuffer, common.Bar{
+	s.dataBuffer = append(s.dataBuffer, types.Bar{
 		Time:   data.Timestamp.Unix(),
 		Open:   data.Open,
 		High:   data.High,
@@ -96,21 +121,21 @@ func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio
 
 	// Need at least slowPeriod + signalPeriod bars to calculate MACD
 	if len(s.dataBuffer) < s.slowPeriod+s.signalPeriod {
-		return
+		return nil
 	}
 
 	// Calculate MACD values
 	macdValues, err := indicators.MACD(s.dataBuffer, s.fastPeriod, s.slowPeriod, s.signalPeriod)
 	if err != nil {
-		return
+		return err
 	}
 	if len(macdValues) == 0 {
-		return
+		return nil
 	}
 
 	// Use the last two MACD values to detect crossovers
 	if len(macdValues) < 2 {
-		return
+		return nil
 	}
 
 	prevMACD := macdValues[len(macdValues)-2].MACD
@@ -119,29 +144,35 @@ func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio
 	currentSignal := macdValues[len(macdValues)-1].Signal
 
 	// Generate buy/sell signals based on MACD crossover
+	if len(s.dataBuffer) == 0 {
+		return nil
+	}
+	latestBar := s.dataBuffer[len(s.dataBuffer)-1]
 	if prevMACD < prevSignal && currentMACD > currentSignal {
 		quantity := 1.0 // default quantity
-		portfolio.Buy(data.Timestamp, data.Close, quantity)
+		portfolio.Buy(time.Unix(latestBar.Time, 0), latestBar.Close, quantity)
 	} else if prevMACD > prevSignal && currentMACD < currentSignal {
 		quantity := 1.0 // 默认交易1单位
-		portfolio.Sell(data.Timestamp, data.Close, quantity)
+		portfolio.Sell(time.Unix(latestBar.Time, 0), latestBar.Close, quantity)
 	}
+	return nil
 }
 
 // OnEnd handles backtest completion
-func (s *MACDStrategy) OnEnd(portfolio common.Portfolio) {
+func (s *MACDStrategy) OnEnd(portfolio *portfolio.Portfolio) error {
 	// Close all positions
-	if closer, ok := portfolio.(interface{ CloseAllPositions() }); ok {
+	if closer, ok := interface{}(portfolio).(interface{ CloseAllPositions() }); ok {
 		closer.CloseAllPositions()
 	}
+	return nil
 }
 
 // Calculate returns MACD indicator values
-func (s *MACDStrategy) Calculate(candles []common.Candle) map[string][]float64 {
+func (s *MACDStrategy) Calculate(candles []types.Candle) map[string][]float64 {
 	// Convert candles to bars
-	bars := make([]common.Bar, len(candles))
+	bars := make([]types.Bar, len(candles))
 	for i, c := range candles {
-		bars[i] = common.Bar{
+		bars[i] = types.Bar{
 			Time:   c.Timestamp.Unix(),
 			Open:   c.Open,
 			High:   c.High,

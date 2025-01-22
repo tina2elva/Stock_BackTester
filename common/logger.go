@@ -2,11 +2,8 @@ package common
 
 import (
 	"fmt"
-	"time"
+	"stock/common/types"
 )
-
-// Ensure time package is used for timestamp formatting
-var _ = time.Time{}
 
 type ConsoleLogger struct{}
 
@@ -14,14 +11,14 @@ func NewConsoleLogger() *ConsoleLogger {
 	return &ConsoleLogger{}
 }
 
-func (l *ConsoleLogger) LogData(data *DataPoint) {
+func (l *ConsoleLogger) LogData(data *types.DataPoint) {
 	// 禁用数据日志
 }
 
-func (l *ConsoleLogger) LogTrade(trade Trade) {
+func (l *ConsoleLogger) LogTrade(trade types.Trade) {
 	// 交易日志格式
 	action := "买入"
-	if trade.Type == ActionSell {
+	if trade.Type == types.ActionSell {
 		action = "卖出"
 	}
 
@@ -40,7 +37,7 @@ func (l *ConsoleLogger) LogTrade(trade Trade) {
 		netAmount)
 }
 
-func (l *ConsoleLogger) LogEnd(portfolio Portfolio) {
+func (l *ConsoleLogger) LogEnd(portfolio types.Portfolio) {
 	// 结束日志格式
 	fmt.Printf("[END] Portfolio Value: %.2f, Cash: %.2f, Positions: %v\n",
 		portfolio.GetValue(),

@@ -87,12 +87,49 @@ func (o *Order) SetStatus(status OrderStatus) error {
 	return nil
 }
 
+// Position 仓位信息
+type Position struct {
+	Symbol       string
+	Quantity     float64
+	AvgPrice     float64
+	MarketValue  float64
+	UnrealizedPL float64
+	RealizedPL   float64
+}
+
 // Account 账户信息
 type Account struct {
-	Cash    float64
-	Equity  float64
-	Margin  float64
-	Balance float64
+	Cash      float64
+	Equity    float64
+	Margin    float64
+	Balance   float64
+	Positions map[string]*Position
+}
+
+// 初始化仓位
+func NewPosition(symbol string) *Position {
+	return &Position{
+		Symbol:       symbol,
+		Quantity:     0,
+		AvgPrice:     0,
+		MarketValue:  0,
+		UnrealizedPL: 0,
+		RealizedPL:   0,
+	}
+}
+
+// 更新仓位信息
+func (p *Position) Update(price float64, quantity float64, action Action) {
+	if action == ActionBuy {
+		totalCost := p.AvgPrice*p.Quantity + price*quantity
+		p.Quantity += quantity
+		p.AvgPrice = totalCost / p.Quantity
+	} else if action == ActionSell {
+		p.Quantity -= quantity
+		p.RealizedPL += (price - p.AvgPrice) * quantity
+	}
+	p.MarketValue = p.Quantity * price
+	p.UnrealizedPL = (price - p.AvgPrice) * p.Quantity
 }
 
 // Bar K线数据
@@ -205,4 +242,9 @@ var (
 	ErrOrderCannotBeCanceled = errors.New("order cannot be canceled")
 	ErrInvalidOrderState     = errors.New("invalid order state transition")
 	ErrInvalidQuantity       = errors.New("invalid quantity")
+	ErrInvalidDataSource     = errors.New("invalid data source")
+	ErrInvalidSymbol         = errors.New("invalid symbol")
+	ErrInvalidDateRange      = errors.New("invalid date range")
+	ErrInvalidInitialCash    = errors.New("invalid initial cash")
+	ErrNoStrategy            = errors.New("no strategy configured")
 )

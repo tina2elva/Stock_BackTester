@@ -2,7 +2,7 @@ package visualization
 
 import (
 	"os"
-	"stock/common"
+	"stock/common/types"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/components"
@@ -17,7 +17,7 @@ func NewChart(title string) *Chart {
 	return &Chart{title: title}
 }
 
-func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]common.Trade, outputFile string) error {
+func (c *Chart) PlotCandlestick(data []types.Candle, tradesMap map[string][]types.Trade, outputFile string) error {
 	// 创建页面
 	page := components.NewPage()
 
@@ -155,13 +155,13 @@ func (c *Chart) PlotCandlestick(data []common.Candle, tradesMap map[string][]com
 		for _, trade := range trades {
 			date := trade.Timestamp.Format("2006-01-02")
 			price := float32(trade.Price)
-			if trade.Type == common.ActionBuy {
+			if trade.Type == types.ActionBuy {
 				buyPoints = append(buyPoints, opts.ScatterData{
 					Value:      []interface{}{date, price},
 					Symbol:     "circle",
 					SymbolSize: 10,
 				})
-			} else if trade.Type == common.ActionSell {
+			} else if trade.Type == types.ActionSell {
 				sellPoints = append(sellPoints, opts.ScatterData{
 					Value:      []interface{}{date, price},
 					Symbol:     "circle",

@@ -1,7 +1,7 @@
 package strategy
 
 import (
-	"stock/common"
+	"stock/common/types"
 	"time"
 )
 
@@ -11,14 +11,14 @@ type SimpleStrategy struct {
 	macdFast   int
 	macdSlow   int
 	macdSignal int
-	logger     common.Logger
+	logger     types.Logger
 }
 
 func (s *SimpleStrategy) Name() string {
 	return "简单策略"
 }
 
-func NewSimpleStrategy(logger common.Logger) *SimpleStrategy {
+func NewSimpleStrategy(logger types.Logger) *SimpleStrategy {
 	return &SimpleStrategy{
 		bought:     false,
 		macdFast:   12, // 默认快速EMA周期
@@ -28,7 +28,7 @@ func NewSimpleStrategy(logger common.Logger) *SimpleStrategy {
 	}
 }
 
-func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio) {
+func (s *SimpleStrategy) OnData(data *types.DataPoint, portfolio types.Portfolio) {
 	// 记录数据
 	if s.logger != nil {
 		s.logger.LogData(data)
@@ -47,11 +47,11 @@ func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfol
 			s.bought = true
 			s.buyPrice = data.Close
 			if s.logger != nil {
-				s.logger.LogTrade(common.Trade{
+				s.logger.LogTrade(types.Trade{
 					Timestamp: data.Timestamp,
 					Price:     data.Close,
 					Quantity:  100,
-					Type:      common.ActionBuy,
+					Type:      types.ActionBuy,
 				})
 			}
 		}
@@ -64,11 +64,11 @@ func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfol
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
 			if s.logger != nil {
-				s.logger.LogTrade(common.Trade{
+				s.logger.LogTrade(types.Trade{
 					Timestamp: data.Timestamp,
 					Price:     data.Close,
 					Quantity:  100,
-					Type:      common.ActionSell,
+					Type:      types.ActionSell,
 				})
 			}
 		}
@@ -77,11 +77,11 @@ func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfol
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
 			if s.logger != nil {
-				s.logger.LogTrade(common.Trade{
+				s.logger.LogTrade(types.Trade{
 					Timestamp: data.Timestamp,
 					Price:     data.Close,
 					Quantity:  100,
-					Type:      common.ActionSell,
+					Type:      types.ActionSell,
 				})
 			}
 		}
@@ -90,18 +90,18 @@ func (s *SimpleStrategy) OnData(data *common.DataPoint, portfolio common.Portfol
 			portfolio.Sell(data.Timestamp, data.Close, 100)
 			s.bought = false
 			if s.logger != nil {
-				s.logger.LogTrade(common.Trade{
+				s.logger.LogTrade(types.Trade{
 					Timestamp: data.Timestamp,
 					Price:     data.Close,
 					Quantity:  100,
-					Type:      common.ActionSell,
+					Type:      types.ActionSell,
 				})
 			}
 		}
 	}
 }
 
-func (s *SimpleStrategy) OnEnd(portfolio common.Portfolio) {
+func (s *SimpleStrategy) OnEnd(portfolio types.Portfolio) {
 	// 记录结束状态
 	if s.logger != nil {
 		s.logger.LogEnd(portfolio)

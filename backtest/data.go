@@ -1,19 +1,19 @@
 package backtest
 
 import (
-	"stock/common"
+	"stock/common/types"
 	"stock/indicators"
 	"stock/portfolio"
 	"time"
 )
 
 type DataHandler interface {
-	OnData(data *common.DataPoint, portfolio *portfolio.Portfolio)
+	OnData(data *types.DataPoint, portfolio *portfolio.Portfolio)
 	OnEnd(portfolio *portfolio.Portfolio)
 }
 
 // PreprocessData 预处理数据，计算技术指标
-func PreprocessData(data []common.Bar) []*common.DataPoint {
+func PreprocessData(data []types.Bar) []*types.DataPoint {
 	if len(data) < 26 { // 需要至少26个数据点计算MACD
 		return nil
 	}
@@ -32,9 +32,9 @@ func PreprocessData(data []common.Bar) []*common.DataPoint {
 	}
 
 	// 创建数据点
-	points := make([]*common.DataPoint, len(data)-start)
+	points := make([]*types.DataPoint, len(data)-start)
 	for i := start; i < len(data); i++ {
-		points[i-start] = &common.DataPoint{
+		points[i-start] = &types.DataPoint{
 			Timestamp: time.Unix(data[i].Time, 0),
 			Open:      data[i].Open,
 			High:      data[i].High,

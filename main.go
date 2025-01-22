@@ -7,18 +7,15 @@ import (
 	"strings"
 	"time"
 
-	// required for Candle and Trade types
 	"stock/analyzer"
 	"stock/backtest"
 	"stock/broker"
 	"stock/common"
+	"stock/common/types"
 	"stock/datasource"
-	"stock/orders"
 	"stock/strategy"
 	"stock/visualization"
 )
-
-// 使用common包中的ConsoleLogger
 
 func main() {
 	// 初始化数据源
@@ -35,24 +32,20 @@ func main() {
 	// 初始化多个策略
 	strategies := []strategy.Strategy{
 		strategy.NewMACDStrategy(12, 26, 9),
-		//strategy.NewRSIStrategy(14, 30, 70),
 	}
 
 	// 初始化费用配置
-	feeConfig := backtest.DefaultFeeConfig()
+	feeConfig := backtest.DefaultFeeConfig
 
 	// 初始资金
 	initialCash := 100000.0
 
 	// 初始化broker
 	logger := common.NewConsoleLogger()
-	broker := broker.NewSimulatedBroker(feeConfig.Commission, logger, initialCash)
-
-	// 初始化订单管理器
-	orderManager := orders.NewOrderManager(broker)
+	broker := broker.NewSimulatedBroker(feeConfig.Commission, types.Logger(logger), initialCash)
 
 	// 初始化回测引擎
-	bt := backtest.NewBacktest(data, initialCash, feeConfig, broker, logger, true, orderManager)
+	bt := backtest.NewBacktest(startDate, endDate, initialCash, ds, broker, logger)
 	for _, strategy := range strategies {
 		bt.AddStrategy(strategy)
 	}
@@ -62,12 +55,12 @@ func main() {
 
 	// 获取回测结果
 	results := bt.Results()
-	if len(results) == 0 {
+	if len(results.Results) == 0 {
 		log.Fatal("没有回测结果")
 	}
 
 	// 遍历所有策略结果
-	for i, result := range results {
+	for i, result := range results.Results {
 		strategyName := strings.TrimPrefix(fmt.Sprintf("%T", strategies[i]), "*strategy.")
 		strategyName = strings.TrimSuffix(strategyName, "Strategy")
 		strategyName = strings.ToUpper(strategyName)
@@ -98,9 +91,9 @@ func main() {
 		fmt.Printf("盈亏比: %.2f\n", profitLossRatio)
 
 		// 将DataPoint转换为Candle
-		candles := make([]common.Candle, len(data))
+		candles := make([]types.Candle, len(data))
 		for i, dp := range data {
-			candles[i] = common.Candle{
+			candles[i] = types.Candle{
 				Timestamp:  dp.Timestamp,
 				Open:       dp.Open,
 				High:       dp.High,
@@ -122,7 +115,7 @@ func main() {
 		}
 
 		// 按策略名称分组交易数据
-		tradesMap := map[string][]common.Trade{
+		tradesMap := map[string][]types.Trade{
 			strategyName: result.Trades,
 		}
 
