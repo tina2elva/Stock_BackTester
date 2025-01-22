@@ -2,6 +2,7 @@ package indicators
 
 import (
 	"errors"
+	"math"
 	"stock/common"
 )
 
@@ -15,14 +16,29 @@ func MACD(bars []common.Bar, fastPeriod, slowPeriod, signalPeriod int) ([]common
 	fastEMA := EMA(bars, fastPeriod)
 	slowEMA := EMA(bars, slowPeriod)
 
+	if fastEMA == nil || slowEMA == nil {
+		return nil, errors.New("failed to calculate EMA")
+	}
+
 	// Calculate MACD line
 	macdLine := make([]float64, len(bars))
-	for i := range macdLine {
+	for i := slowPeriod - 1; i < len(bars); i++ {
 		macdLine[i] = fastEMA[i] - slowEMA[i]
 	}
 
 	// Calculate Signal line (EMA of MACD line)
-	signalLine := EMAForMACD(macdLine, signalPeriod)
+	signalLine := EMAForMACD(macdLine[slowPeriod-1:], signalPeriod)
+	if signalLine == nil {
+		return nil, errors.New("failed to calculate signal line")
+	}
+
+	// Pad signalLine with NaN values to match original length
+	fullSignalLine := make([]float64, len(bars))
+	for i := 0; i < slowPeriod-1; i++ {
+		fullSignalLine[i] = math.NaN()
+	}
+	copy(fullSignalLine[slowPeriod-1:], signalLine)
+	signalLine = fullSignalLine
 
 	// Calculate MACD histogram
 	histogram := make([]float64, len(bars))

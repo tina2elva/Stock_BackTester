@@ -1,11 +1,49 @@
-package common
+package types
 
 import (
 	"errors"
 	"time"
 )
 
-// Order 订单结构
+// OrderType 定义订单类型
+type OrderType int
+
+const (
+	OrderTypeBuy OrderType = iota
+	OrderTypeSell
+	OrderTypeMarket
+	OrderTypeLimit
+	OrderTypeStop
+)
+
+// OrderStatus 定义订单状态
+type OrderStatus int
+
+const (
+	OrderStatusNew OrderStatus = iota
+	OrderStatusPending
+	OrderStatusFilled
+	OrderStatusCanceled
+	OrderStatusRejected
+)
+
+// Action 交易动作
+type Action int
+
+const (
+	ActionBuy Action = iota
+	ActionSell
+	ActionHold
+)
+
+// Broker 定义经纪人接口
+type Broker interface {
+	ExecuteOrder(order *Order) error
+	GetAccount() *Account
+	CancelOrder(orderID string) error
+}
+
+// Order 定义订单结构
 type Order struct {
 	ID         string
 	StrategyID string
@@ -18,31 +56,35 @@ type Order struct {
 	UpdatedAt  time.Time
 }
 
-// OrderType 订单类型
-type OrderType int
+// Order方法扩展
+func (o *Order) CanExecute() bool {
+	return o.Status == OrderStatusNew || o.Status == OrderStatusFilled
+}
 
-const (
-	OrderTypeMarket OrderType = iota
-	OrderTypeLimit
-	OrderTypeStop
-)
+func (o *Order) CanCancel() bool {
+	return o.Status == OrderStatusNew
+}
 
-// OrderStatus 订单状态
-type OrderStatus int
+func (o *Order) SetStatus(status OrderStatus) error {
+	// 验证状态转换
+	switch status {
+	case OrderStatusFilled:
+		if !o.CanExecute() {
+			return ErrInvalidOrderState
+		}
+	case OrderStatusCanceled:
+		if !o.CanCancel() {
+			return ErrOrderCannotBeCanceled
+		}
+	case OrderStatusRejected:
+		// 任何状态都可以被拒绝
+	default:
+		return ErrInvalidOrderState
+	}
 
-const (
-	OrderStatusNew OrderStatus = iota
-	OrderStatusPending
-	OrderStatusFilled
-	OrderStatusCanceled
-	OrderStatusRejected
-)
-
-// Broker 经纪商接口
-type Broker interface {
-	ExecuteOrder(order *Order) error
-	GetAccount() *Account
-	CancelOrder(orderID string) error
+	o.Status = status
+	o.UpdatedAt = time.Now()
+	return nil
 }
 
 // Account 账户信息
@@ -97,15 +139,6 @@ type Trade struct {
 	OrderID   string
 }
 
-// Action 交易动作
-type Action int
-
-const (
-	ActionBuy Action = iota
-	ActionSell
-	ActionHold
-)
-
 // MACDValue MACD指标值
 type MACDValue struct {
 	MACD      float64
@@ -156,13 +189,7 @@ type Portfolio interface {
 	Sell(timestamp time.Time, price float64, quantity float64) error
 }
 
-var (
-	ErrInsufficientFunds     = errors.New("insufficient funds")
-	ErrInsufficientPosition  = errors.New("insufficient position")
-	ErrOrderNotFound         = errors.New("order not found")
-	ErrOrderCannotBeCanceled = errors.New("order cannot be canceled")
-)
-
+// Signal 交易信号
 type Signal struct {
 	Action Action
 	Price  float64
@@ -170,10 +197,12 @@ type Signal struct {
 	Qty    int
 }
 
+// 定义错误类型
 var (
-	ErrInvalidDataSource  = errors.New("invalid data source")
-	ErrInvalidSymbol      = errors.New("invalid symbol")
-	ErrInvalidDateRange   = errors.New("invalid date range")
-	ErrInvalidInitialCash = errors.New("invalid initial cash")
-	ErrNoStrategy         = errors.New("no strategy configured")
+	ErrInsufficientFunds     = errors.New("insufficient funds")
+	ErrInsufficientPosition  = errors.New("insufficient position")
+	ErrOrderNotFound         = errors.New("order not found")
+	ErrOrderCannotBeCanceled = errors.New("order cannot be canceled")
+	ErrInvalidOrderState     = errors.New("invalid order state transition")
+	ErrInvalidQuantity       = errors.New("invalid quantity")
 )

@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"math"
 	"stock/common"
 	"stock/indicators"
 )
@@ -19,6 +20,9 @@ func NewMACDStrategy(fast, slow, signal int) *MACDStrategy {
 		fastPeriod:   fast,
 		slowPeriod:   slow,
 		signalPeriod: signal,
+		dataBuffer:   make([]common.Bar, 0),
+		prevMACD:     math.NaN(),
+		prevSignal:   math.NaN(),
 	}
 }
 
@@ -29,14 +33,19 @@ func (s *MACDStrategy) Name() string {
 func (s *MACDStrategy) Run(data []common.Bar) []common.Signal {
 	signals := make([]common.Signal, len(data))
 
+	// Need at least slowPeriod + signalPeriod bars to calculate MACD
+	if len(data) < s.slowPeriod+s.signalPeriod {
+		return signals
+	}
+
 	// Calculate MACD values
 	macdValues, err := indicators.MACD(data, s.fastPeriod, s.slowPeriod, s.signalPeriod)
 	if err != nil {
 		return signals
 	}
 
-	// Skip first signalPeriod points to allow indicators to stabilize
-	start := s.signalPeriod
+	// Skip first slowPeriod + signalPeriod points to allow indicators to stabilize
+	start := s.slowPeriod + s.signalPeriod
 	if start < 1 {
 		start = 1
 	}
@@ -46,24 +55,28 @@ func (s *MACDStrategy) Run(data []common.Bar) []common.Signal {
 		signal := macdValues[i].Signal
 
 		// Generate buy/sell signals based on MACD crossover
-		if s.prevMACD < s.prevSignal && macd > signal {
-			signals[i] = common.Signal{
-				Action: common.ActionBuy,
-				Price:  data[i].Close,
-				Time:   data[i].Time,
-				Qty:    1, // 默认交易1单位
+		// Only generate signals when we have valid MACD and Signal values
+		if !math.IsNaN(macd) && !math.IsNaN(signal) {
+			if !math.IsNaN(s.prevMACD) && !math.IsNaN(s.prevSignal) {
+				if s.prevMACD < s.prevSignal && macd > signal {
+					signals[i] = common.Signal{
+						Action: common.ActionBuy,
+						Price:  data[i].Close,
+						Time:   data[i].Time,
+						Qty:    1, // 默认交易1单位
+					}
+				} else if s.prevMACD > s.prevSignal && macd < signal {
+					signals[i] = common.Signal{
+						Action: common.ActionSell,
+						Price:  data[i].Close,
+						Time:   data[i].Time,
+						Qty:    1, // 默认交易1单位
+					}
+				}
 			}
-		} else if s.prevMACD > s.prevSignal && macd < signal {
-			signals[i] = common.Signal{
-				Action: common.ActionSell,
-				Price:  data[i].Close,
-				Time:   data[i].Time,
-				Qty:    1, // 默认交易1单位
-			}
+			s.prevMACD = macd
+			s.prevSignal = signal
 		}
-
-		s.prevMACD = macd
-		s.prevSignal = signal
 	}
 
 	return signals
@@ -107,7 +120,7 @@ func (s *MACDStrategy) OnData(data *common.DataPoint, portfolio common.Portfolio
 
 	// Generate buy/sell signals based on MACD crossover
 	if prevMACD < prevSignal && currentMACD > currentSignal {
-		quantity := 1.0 // 默认交易1单位
+		quantity := 1.0 // default quantity
 		portfolio.Buy(data.Timestamp, data.Close, quantity)
 	} else if prevMACD > prevSignal && currentMACD < currentSignal {
 		quantity := 1.0 // 默认交易1单位

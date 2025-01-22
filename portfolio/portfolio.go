@@ -3,21 +3,22 @@ package portfolio
 import (
 	"stock/broker"
 	"stock/common"
-	"stock/strategy"
+	"stock/common/types"
+	"stock/orders"
 	"time"
 )
 
 type Portfolio struct {
-	cash            float64
-	initialCash     float64
-	positions       map[string]float64
-	trades          []common.Trade
-	positionSizes   map[string]float64
-	broker          broker.Broker
-	currentStrategy strategy.Strategy
+	cash          float64
+	initialCash   float64
+	positions     map[string]float64
+	trades        []common.Trade
+	positionSizes map[string]float64
+	broker        broker.Broker
+	orderManager  *orders.OrderManager
 }
 
-func NewPortfolio(initialCash float64, broker broker.Broker) *Portfolio {
+func NewPortfolio(initialCash float64, broker broker.Broker, orderManager *orders.OrderManager) *Portfolio {
 	return &Portfolio{
 		cash:          initialCash,
 		initialCash:   initialCash,
@@ -25,11 +26,8 @@ func NewPortfolio(initialCash float64, broker broker.Broker) *Portfolio {
 		trades:        make([]common.Trade, 0),
 		positionSizes: make(map[string]float64),
 		broker:        broker,
+		orderManager:  orderManager,
 	}
-}
-
-func (p *Portfolio) SetCurrentStrategy(strategy strategy.Strategy) {
-	p.currentStrategy = strategy
 }
 
 func (p *Portfolio) Balance() float64 {
@@ -57,12 +55,25 @@ func (p *Portfolio) Transactions() []common.Trade {
 }
 
 func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) error {
-	order, err := p.broker.CreateOrder(common.ActionBuy, price, quantity)
+	// 通过OrderManager创建订单
+	order, err := p.orderManager.CreateOrder("manual", "asset", quantity, types.OrderTypeMarket)
 	if err != nil {
 		return err
 	}
 
-	if order.Status == broker.OrderFilled {
+	// 执行订单
+	err = p.orderManager.ExecuteOrder(order.ID)
+	if err != nil {
+		return err
+	}
+
+	// 获取更新后的订单状态
+	order, err = p.orderManager.GetOrder(order.ID)
+	if err != nil {
+		return err
+	}
+
+	if order.Status == types.OrderStatusFilled {
 		cost := price * quantity
 		fee := p.broker.CalculateTradeCost(common.ActionBuy, price, quantity)
 		totalCost := cost + fee
@@ -77,7 +88,7 @@ func (p *Portfolio) Buy(timestamp time.Time, price float64, quantity float64) er
 				Quantity:  quantity,
 				Type:      common.ActionBuy,
 				Fee:       fee,
-				Strategy:  p.currentStrategy.Name(),
+				Strategy:  "manual",
 				OrderID:   order.ID,
 			}
 			p.trades = append(p.trades, trade)
@@ -96,12 +107,25 @@ func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) e
 		return common.ErrInsufficientPosition
 	}
 
-	order, err := p.broker.CreateOrder(common.ActionSell, price, quantity)
+	// 通过OrderManager创建订单
+	order, err := p.orderManager.CreateOrder("manual", "asset", quantity, types.OrderTypeMarket)
 	if err != nil {
 		return err
 	}
 
-	if order.Status == broker.OrderFilled {
+	// 执行订单
+	err = p.orderManager.ExecuteOrder(order.ID)
+	if err != nil {
+		return err
+	}
+
+	// 获取更新后的订单状态
+	order, err = p.orderManager.GetOrder(order.ID)
+	if err != nil {
+		return err
+	}
+
+	if order.Status == types.OrderStatusFilled {
 		proceeds := price * quantity
 		fee := p.broker.CalculateTradeCost(common.ActionSell, price, quantity)
 		totalProceeds := proceeds - fee
@@ -115,7 +139,7 @@ func (p *Portfolio) Sell(timestamp time.Time, price float64, quantity float64) e
 			Quantity:  quantity,
 			Type:      common.ActionSell,
 			Fee:       fee,
-			Strategy:  p.currentStrategy.Name(),
+			Strategy:  "manual",
 			OrderID:   order.ID,
 		}
 		p.trades = append(p.trades, trade)

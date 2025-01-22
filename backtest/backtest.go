@@ -4,27 +4,29 @@ import (
 	"math"
 	"stock/broker"
 	"stock/common"
+	"stock/orders"
 	"stock/portfolio"
 	"stock/strategy"
 	"sync"
 )
 
 type Backtest struct {
-	data       []*common.DataPoint
-	strategies []strategy.Strategy
-	portfolios []*portfolio.Portfolio
-	broker     broker.Broker
-	logger     common.Logger
-	logTrades  bool // 是否记录交易日志
-	feeConfig  common.FeeConfig
+	data         []*common.DataPoint
+	strategies   []strategy.Strategy
+	portfolios   []*portfolio.Portfolio
+	broker       broker.Broker
+	logger       common.Logger
+	logTrades    bool // 是否记录交易日志
+	feeConfig    common.FeeConfig
+	initialCash  float64
+	orderManager *orders.OrderManager
 }
 
 func (b *Backtest) AddStrategy(strategy strategy.Strategy) {
 	b.strategies = append(b.strategies, strategy)
 	// 为每个策略创建一个对应的portfolio
-	broker := broker.NewSimulatedBroker(0.0003, b.logger) // 使用默认佣金率和日志记录器
-	initialCash := 100000.0                               // 默认初始资金
-	b.portfolios = append(b.portfolios, portfolio.NewPortfolio(initialCash, broker))
+	broker := broker.NewSimulatedBroker(0.0003, b.logger, b.initialCash) // 使用默认佣金率和日志记录器
+	b.portfolios = append(b.portfolios, portfolio.NewPortfolio(b.initialCash, broker, b.orderManager))
 }
 
 type PerformanceMetrics struct {
@@ -47,14 +49,16 @@ type BacktestResults struct {
 	EquityCurve []float64
 }
 
-func NewBacktest(data []*common.DataPoint, initialCash float64, feeConfig common.FeeConfig, broker broker.Broker, logger common.Logger, logTrades bool) *Backtest {
+func NewBacktest(data []*common.DataPoint, initialCash float64, feeConfig common.FeeConfig, broker broker.Broker, logger common.Logger, logTrades bool, orderManager *orders.OrderManager) *Backtest {
 	return &Backtest{
-		data:       data,
-		feeConfig:  feeConfig,
-		strategies: []strategy.Strategy{},
-		portfolios: []*portfolio.Portfolio{},
-		logger:     logger,
-		logTrades:  logTrades,
+		data:         data,
+		feeConfig:    feeConfig,
+		strategies:   []strategy.Strategy{},
+		portfolios:   []*portfolio.Portfolio{},
+		logger:       logger,
+		logTrades:    logTrades,
+		initialCash:  initialCash,
+		orderManager: orderManager,
 	}
 }
 
@@ -77,15 +81,12 @@ func (b *Backtest) Run() {
 		go func(index int) {
 			defer wg.Done()
 			for _, dataPoint := range b.data {
-				// 在交易前设置当前策略名称
-				b.portfolios[index].SetCurrentStrategy(b.strategies[index])
 				// 自动记录交易日志
 				if b.logger != nil {
 					b.logger.LogData(dataPoint)
 				}
 				b.strategies[index].OnData(dataPoint, b.portfolios[index])
 			}
-			b.portfolios[index].SetCurrentStrategy(b.strategies[index])
 			// 自动记录结束日志
 			if b.logger != nil {
 				b.logger.LogEnd(b.portfolios[index])

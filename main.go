@@ -13,6 +13,7 @@ import (
 	"stock/broker"
 	"stock/common"
 	"stock/datasource"
+	"stock/orders"
 	"stock/strategy"
 	"stock/visualization"
 )
@@ -45,10 +46,13 @@ func main() {
 
 	// 初始化broker
 	logger := common.NewConsoleLogger()
-	broker := broker.NewSimulatedBroker(feeConfig.Commission, logger)
+	broker := broker.NewSimulatedBroker(feeConfig.Commission, logger, initialCash)
+
+	// 初始化订单管理器
+	orderManager := orders.NewOrderManager(broker)
 
 	// 初始化回测引擎
-	bt := backtest.NewBacktest(data, initialCash, feeConfig, broker, logger, true)
+	bt := backtest.NewBacktest(data, initialCash, feeConfig, broker, logger, true, orderManager)
 	for _, strategy := range strategies {
 		bt.AddStrategy(strategy)
 	}

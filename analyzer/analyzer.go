@@ -32,6 +32,10 @@ func (a *Analyzer) AnnualizedReturn(finalValue float64, duration time.Duration) 
 
 // 计算最大回撤
 func (a *Analyzer) MaxDrawdown(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
 	peak := values[0]
 	maxDrawdown := 0.0
 
