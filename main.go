@@ -42,7 +42,11 @@ func main() {
 
 	// 初始化broker
 	logger := common.NewConsoleLogger()
-	broker := broker.NewSimulatedBroker(feeConfig.Commission, types.Logger(logger), initialCash)
+	broker := broker.NewSimulatedBroker(
+		broker.NewFixedFeeCalculator(feeConfig.Commission),
+		types.Logger(logger),
+		initialCash,
+	)
 
 	// 初始化回测引擎
 	bt := backtest.NewBacktest(startDate, endDate, initialCash, ds, broker, logger)

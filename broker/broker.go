@@ -44,19 +44,55 @@ type Broker interface {
 	GetObserver() Observer
 }
 
-type SimulatedBroker struct {
-	feeRate   float64
-	logger    types.Logger
-	account   *types.Account
-	orders    map[string]*types.Order
-	positions map[string]*types.Position
-	observer  Observer
+// FeeCalculator 定义交易费用计算接口
+type FeeCalculator interface {
+	Calculate(action types.Action, price float64, quantity float64) float64
 }
 
-func NewSimulatedBroker(feeRate float64, logger types.Logger, initialCash float64) *SimulatedBroker {
+// FixedFeeCalculator 固定费率计算器
+type FixedFeeCalculator struct {
+	feeRate float64
+}
+
+// NewFixedFeeCalculator 创建固定费率计算器
+func NewFixedFeeCalculator(feeRate float64) *FixedFeeCalculator {
+	return &FixedFeeCalculator{feeRate: feeRate}
+}
+
+func (f *FixedFeeCalculator) Calculate(action types.Action, price float64, quantity float64) float64 {
+	return price * quantity * f.feeRate
+}
+
+// CustomFeeCalculator 自定义费用计算器
+type CustomFeeCalculator struct {
+	calcFunc func(action types.Action, price float64, quantity float64) float64
+}
+
+// NewCustomFeeCalculator 创建自定义费用计算器
+func NewCustomFeeCalculator(calcFunc func(action types.Action, price float64, quantity float64) float64) *CustomFeeCalculator {
+	return &CustomFeeCalculator{calcFunc: calcFunc}
+}
+
+func (c *CustomFeeCalculator) Calculate(action types.Action, price float64, quantity float64) float64 {
+	return c.calcFunc(action, price, quantity)
+}
+
+type SimulatedBroker struct {
+	feeCalculator FeeCalculator
+	logger        types.Logger
+	account       *types.Account
+	orders        map[string]*types.Order
+	positions     map[string]*types.Position
+	observer      Observer
+}
+
+func NewSimulatedBroker(feeCalculator FeeCalculator, logger types.Logger, initialCash float64) *SimulatedBroker {
+	if feeCalculator == nil {
+		feeCalculator = &FixedFeeCalculator{feeRate: 0.0003} // 默认费率0.03%
+	}
 	return &SimulatedBroker{
-		feeRate: feeRate,
-		logger:  logger,
+		feeCalculator: feeCalculator,
+		logger:        logger,
 		account: &types.Account{
 			Cash:      initialCash,
 			Equity:    initialCash,
@@ -205,7 +241,7 @@ func (b *SimulatedBroker) GetAccount() *types.Account {
 }
 
 func (b *SimulatedBroker) CalculateTradeCost(action types.Action, price float64, quantity float64) float64 {
-	return price * quantity * b.feeRate
+	return b.feeCalculator.Calculate(action, price, quantity)
 }
 
 func generateOrderID() string {
